@@ -11,13 +11,14 @@
         android:maxSdkVersion="32" />
 
     <application
+        android:enableOnBackInvokedCallback="true"
         android:name=".TodayApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="Today"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Today">
+        android:theme="@style/Theme.Today.Starting">
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -5,6 +5,12 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Matahari diperkecil ke 78% agar tidak memenuhi zona aman ikon adaptif. -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.78"
+        android:scaleY="0.78">
     <path
         android:pathData="M54,31 L54,22 M77,54 L86,54 M54,77 L54,86 M31,54 L22,54"
         android:strokeColor="#1A1A2E"
@@ -18,4 +24,5 @@
     <path
         android:fillColor="#1A1A2E"
         android:pathData="M54,39 A15,15 0 1,1 53.99,39 Z" />
+    </group>
 </vector>

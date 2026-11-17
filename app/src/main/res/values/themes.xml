@@ -7,5 +7,11 @@
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
     </style>
+    <!-- Splash: logo tampil sampai status onboarding terbaca, tanpa layar krem kosong. -->
+    <style name="Theme.Today.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/launcher_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.Today</item>
+    </style>
     <color name="background">#FDFCF8</color>
 </resources>
