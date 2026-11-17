@@ -1,5 +1,33 @@
 package com.farhan.today.ui.calendar
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.painterResource
+import com.farhan.today.ui.components.ConfirmDialog
+import com.farhan.today.ui.components.DetailScaffold
+import com.farhan.today.ui.components.FieldLabel
+import com.farhan.today.ui.components.LoadingSkeleton
+import com.farhan.today.ui.components.PrimaryButton
+import com.farhan.today.ui.components.TopBarAction
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,7 +44,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -88,6 +115,7 @@ fun CalendarRoute(
     initialEvent: String? = null,
     openAdd: Boolean = false,
     modules: Set<AppModule> = AppModule.entries.toSet(),
+    onBack: () -> Unit = {},
 ) {
     val container = LocalContext.current.appContainer
     val vm: CalendarViewModel = viewModel(factory = viewModelFactory {
@@ -135,6 +163,7 @@ fun CalendarRoute(
             } else onNavigate(item.route())
         },
         onAdd = { addEvent(state.selected) },
+        onBack = onBack,
     )
     if (eventMissing) {
         AlertDialog(
@@ -162,45 +191,71 @@ fun CalendarScreen(
     onToday: () -> Unit,
     onOpenItem: (AgendaItem) -> Unit,
     onAdd: (() -> Unit)? = null,
+    onBack: () -> Unit = {},
 ) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .statusBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    DetailScaffold(
+        title = "Kalender",
+        onBack = onBack,
+        actions = {
+            if (onAdd != null) TopBarAction(R.drawable.ic_add, "Tambah agenda", onClick = onAdd)
+        },
     ) {
-        Text("Kalender", style = TodayType.Display, color = TodayColors.Headline)
-
         BoxWithConstraints {
-            val showGrid = maxWidth >= 336.dp && LocalDensity.current.fontScale < 1.5f
+            // 7 kolom × 42dp masih nyaman disentuh; di bawah itu pakai pemilih tanggal.
+            val showGrid = maxWidth >= 294.dp && LocalDensity.current.fontScale < 1.5f
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (showGrid) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(formatMonthYear(state.month.atDay(1)), style = TodayType.Section, color = TodayColors.Ink, modifier = Modifier.weight(1f))
-                        RoundButton("‹", "Bulan sebelumnya", onPrevious)
-                        RoundButton("›", "Bulan berikutnya", onNext)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        AnimatedContent(
+                            targetState = state.month,
+                            transitionSpec = { monthSlide(targetState > initialState) },
+                            modifier = Modifier.weight(1f),
+                            label = "month-title",
+                        ) { month ->
+                            Text(formatMonthYear(month.atDay(1)), style = TodayType.Section, color = TodayColors.Ink)
+                        }
+                        RoundButton(R.drawable.ic_chevron_left, "Bulan sebelumnya", onPrevious)
+                        RoundButton(R.drawable.ic_chevron_right, "Bulan berikutnya", onNext)
                     }
-                    MonthGrid(state, onSelect)
+                    // Geser kiri/kanan di grid untuk pindah bulan.
+                    var drag by remember { mutableFloatStateOf(0f) }
+                    AnimatedContent(
+                        targetState = state.month,
+                        transitionSpec = { monthSlide(targetState > initialState) },
+                        modifier = Modifier.pointerInput(Unit) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { drag = 0f },
+                                onDragEnd = {
+                                    if (drag < -80f) onNext() else if (drag > 80f) onPrevious()
+                                    drag = 0f
+                                },
+                            ) { _, amount -> drag += amount }
+                        },
+                        label = "month-grid",
+                    ) { month ->
+                        MonthGrid(month, state, onSelect)
+                    }
+                    Legend()
                 } else {
                     DateField(state.selected, { date -> if (date != null) onSelect(date) }, placeholder = "Pilih tanggal")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        RoundButton("‹", "Hari sebelumnya") { onSelect(state.selected.minusDays(1)) }
-                        RoundButton("›", "Hari berikutnya") { onSelect(state.selected.plusDays(1)) }
+                        RoundButton(R.drawable.ic_chevron_left, "Hari sebelumnya") { onSelect(state.selected.minusDays(1)) }
+                        RoundButton(R.drawable.ic_chevron_right, "Hari berikutnya") { onSelect(state.selected.plusDays(1)) }
                     }
                 }
-                Pill("Hari ini", selected = state.selected == state.today, onClick = onToday)
+                if (state.selected != state.today) Pill("Kembali ke hari ini", onClick = onToday)
             }
         }
 
         SectionTitle(formatLongDate(state.selected), trailing = "${state.selectedItems.size} agenda")
-        onAdd?.let { Pill("+ Tambah agenda", onClick = it) }
-        if (state.selectedItems.isEmpty() && !state.loading) {
+        if (state.loading) {
+            LoadingSkeleton(rows = 2, showHeader = false)
+        } else if (state.selectedItems.isEmpty()) {
             EmptyState(
                 title = "Tidak ada agenda",
                 message = if (state.selected == state.today) "Hari ini bebas. Saatnya istirahat atau menyicil tugas."
                 else "Belum ada jadwal di tanggal ini.",
+                action = onAdd?.let { add -> { Pill("+ Tambah agenda", selected = true, onClick = add) } },
             )
         }
         state.selectedItems.forEach { item ->
@@ -211,32 +266,37 @@ fun CalendarScreen(
                 color = item.source.cardColor(),
                 modifier = Modifier.fillMaxWidth(),
                 done = item.done,
+                trailingIcon = R.drawable.ic_chevron_right,
                 onClick = { onOpenItem(item) },
             )
         }
     }
 }
 
+private fun monthSlide(forward: Boolean): ContentTransform =
+    (slideInHorizontally(tween(260)) { w -> (if (forward) 1 else -1) * w / 6 } + fadeIn(tween(200, delayMillis = 60))) togetherWith
+        (slideOutHorizontally(tween(260)) { w -> (if (forward) -1 else 1) * w / 6 } + fadeOut(tween(90)))
+
 @Composable
-private fun RoundButton(symbol: String, description: String, onClick: () -> Unit) {
+private fun RoundButton(icon: Int, description: String, onClick: () -> Unit) {
     Box(
         Modifier
             .size(48.dp)
             .clip(CircleShape)
             .background(TodayColors.Chip)
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(role = Role.Button, onClickLabel = description, onClick = onClick)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
-    ) { Text(symbol, style = TodayType.CardTitle, color = TodayColors.Ink) }
+    ) { Icon(painterResource(icon), null, tint = TodayColors.Ink) }
 }
 
 /** Kolom Senin–Minggu. Beda visual: dipilih = isi violet, hari ini = cincin gelap, ada agenda = titik warna modul. */
 @Composable
-private fun MonthGrid(state: CalendarUiState, onSelect: (LocalDate) -> Unit) {
-    val first = state.month.atDay(1)
+private fun MonthGrid(month: YearMonth, state: CalendarUiState, onSelect: (LocalDate) -> Unit) {
+    val first = month.atDay(1)
     val offset = if (state.weekStartsSunday) first.dayOfWeek.value % 7 else first.dayOfWeek.value - 1
     val days = if (state.weekStartsSunday) listOf(DayOfWeek.SUNDAY) + DayOfWeek.entries.dropLast(1) else DayOfWeek.entries
-    val cells = offset + state.month.lengthOfMonth()
+    val cells = offset + month.lengthOfMonth()
     val weeks = (cells + 6) / 7
 
     Column(
@@ -245,7 +305,7 @@ private fun MonthGrid(state: CalendarUiState, onSelect: (LocalDate) -> Unit) {
             .clip(TodayShapes.Card)
             .background(TodayColors.Surface)
             .border(BorderStroke(1.dp, TodayColors.NavStroke), TodayShapes.Card)
-            .padding(vertical = 12.dp),
+            .padding(vertical = 12.dp, horizontal = 2.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Row {
@@ -262,9 +322,9 @@ private fun MonthGrid(state: CalendarUiState, onSelect: (LocalDate) -> Unit) {
             Row {
                 repeat(7) { col ->
                     val dayNum = w * 7 + col - offset + 1
-                    Box(Modifier.weight(1f).heightIn(min = 52.dp), contentAlignment = Alignment.TopCenter) {
-                        if (dayNum in 1..state.month.lengthOfMonth()) {
-                            DayCell(state.month.atDay(dayNum), state, onSelect)
+                    Box(Modifier.weight(1f).heightIn(min = 48.dp), contentAlignment = Alignment.TopCenter) {
+                        if (dayNum in 1..month.lengthOfMonth()) {
+                            DayCell(month.atDay(dayNum), state, onSelect)
                         }
                     }
                 }
@@ -281,7 +341,7 @@ private fun DayCell(date: LocalDate, state: CalendarUiState, onSelect: (LocalDat
     Column(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = 52.dp)
+            .heightIn(min = 48.dp)
             .clip(TodayShapes.Chip)
             .clickable(role = Role.Button) { onSelect(date) }
             .semantics {
@@ -314,9 +374,10 @@ private fun DayCell(date: LocalDate, state: CalendarUiState, onSelect: (LocalDat
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Legend() {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         listOf(AgendaSource.WORKOUT to "Latihan", AgendaSource.CAREER to "Karier", AgendaSource.FINANCE to "Tagihan", AgendaSource.TASK to "Tugas", AgendaSource.CALENDAR to "Agenda")
             .forEach { (s, label) ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -327,7 +388,7 @@ private fun Legend() {
     }
 }
 
-@Preview(showBackground = true, backgroundColor = 0xFFFDFCF8, widthDp = 393, heightDp = 900)
+@com.farhan.today.ui.components.PhonePreviews
 @Composable
 private fun CalendarPreview() = TodayTheme {
     val today = LocalDate.of(2026, 11, 9)
@@ -344,6 +405,7 @@ private fun CalendarPreview() = TodayTheme {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CalendarEventDialog(
     event: CalendarEvent,
@@ -353,37 +415,69 @@ private fun CalendarEventDialog(
 ) {
     var draft by remember(event) { mutableStateOf(event) }
     var confirmDelete by remember(event) { mutableStateOf(false) }
+    var confirmDiscard by remember(event) { mutableStateOf(false) }
+    var showErrors by remember(event) { mutableStateOf(false) }
+    val dirty = draft != event
     val start = draft.startTime
     val end = draft.endTime
     val until = draft.weeklyUntil
-    val valid = draft.title.isNotBlank() && (end == null || (start != null && end > start)) &&
-        (until == null || until >= draft.date)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (onDelete == null) "Tambah agenda" else "Edit agenda") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                TodayTextField(draft.title, { draft = draft.copy(title = it) }, "Judul")
-                TodayTextField(draft.notes, { draft = draft.copy(notes = it) }, "Catatan atau lokasi")
-                DateField(draft.date, { if (it != null) draft = draft.copy(date = it) })
-                TimeField(start, { draft = draft.copy(startTime = it, endTime = if (it == null) null else end) }, placeholder = "Jam mulai (opsional)", clearable = true)
-                if (start != null) TimeField(end, { draft = draft.copy(endTime = it) }, placeholder = "Jam selesai (opsional)", clearable = true)
-                DateField(until, { draft = draft.copy(weeklyUntil = it) }, placeholder = "Ulang tiap minggu sampai…", clearable = true)
-                if (until != null && until < draft.date) Text("Tanggal akhir harus pada atau setelah tanggal mulai.")
-                if (end != null && start != null && end <= start) Text("Jam selesai harus setelah jam mulai.")
-                if (onDelete != null) TextButton(onClick = { confirmDelete = true }) { Text("Hapus agenda") }
-            }
+    val titleError = draft.title.isBlank()
+    val timeError = end != null && (start == null || end <= start)
+    val untilError = until != null && until < draft.date
+    val valid = !titleError && !timeError && !untilError
+    val sheet = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { value ->
+            val closing = value == SheetValue.Hidden
+            if (closing && dirty) confirmDiscard = true
+            !closing || !dirty
         },
-        confirmButton = { TextButton(enabled = valid, onClick = { onSave(draft.copy(title = draft.title.trim())) }) { Text("Simpan") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } },
     )
+    ModalBottomSheet(
+        onDismissRequest = { if (dirty) confirmDiscard = true else onDismiss() },
+        sheetState = sheet,
+        containerColor = TodayColors.Background,
+    ) {
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().imePadding().padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(if (onDelete == null) "Tambah agenda" else "Ubah agenda", style = TodayType.Section, color = TodayColors.Ink)
+            TodayTextField(draft.title, { draft = draft.copy(title = it) }, "Judul *", error = if (showErrors && titleError) "Wajib diisi" else null)
+            TodayTextField(draft.notes, { draft = draft.copy(notes = it) }, "Catatan atau lokasi")
+            FieldLabel("Tanggal")
+            DateField(draft.date, { if (it != null) draft = draft.copy(date = it) })
+            FieldLabel("Jam (opsional)")
+            TimeField(start, { draft = draft.copy(startTime = it, endTime = if (it == null) null else end) }, placeholder = "Seharian", clearable = true)
+            if (start != null) TimeField(end, { draft = draft.copy(endTime = it) }, placeholder = "Jam selesai (opsional)", clearable = true)
+            if (timeError) ErrorText("Jam selesai harus setelah jam mulai.")
+            FieldLabel("Ulangi tiap minggu")
+            DateField(until, { draft = draft.copy(weeklyUntil = it) }, placeholder = "Tidak diulang", clearable = true)
+            if (untilError) ErrorText("Tanggal akhir harus pada atau setelah tanggal mulai.")
+            Spacer(Modifier.height(4.dp))
+            PrimaryButton("Simpan") {
+                if (valid) onSave(draft.copy(title = draft.title.trim())) else showErrors = true
+            }
+            if (onDelete != null) {
+                TextButton(onClick = { confirmDelete = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    Text("Hapus agenda", color = TodayColors.Danger, style = TodayType.Label)
+                }
+            }
+        }
+    }
     if (confirmDelete && onDelete != null) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("Hapus agenda?") },
-            text = { Text("Semua kemunculan agenda ini akan dihapus.") },
-            confirmButton = { TextButton(onClick = onDelete) { Text("Hapus") } },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Batal") } },
+        ConfirmDialog(
+            "Hapus agenda?", "Semua kemunculan agenda ini akan dihapus.", "Hapus",
+            onConfirm = { confirmDelete = false; onDelete() }, onDismiss = { confirmDelete = false }, destructive = true,
+        )
+    }
+    if (confirmDiscard) {
+        ConfirmDialog(
+            "Buang perubahan?", "Agenda ini belum disimpan.", "Buang",
+            onConfirm = { confirmDiscard = false; onDismiss() }, onDismiss = { confirmDiscard = false }, destructive = true,
         )
     }
 }
+
+@Composable
+private fun ErrorText(text: String) = Text(text, style = TodayType.Meta, color = TodayColors.Danger)
