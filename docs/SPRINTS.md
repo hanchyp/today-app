@@ -158,7 +158,7 @@ Semua FK memakai `onDelete = CASCADE`, kecuali referensi ke `category` dan `rout
 **Database**
 - [x] Semua entity, DAO, dan `TypeConverters` (LocalDate, LocalTime, enum) sesuai Bagian 1
 - [x] `TodayDatabase` versi 1, skema JSON ter-ekspor dan ikut di-commit
-- [x] `SeedData`: saat pertama kali dibuka, isi data contoh yang sama dengan desain (Push Day 17.00, coding test GDP Labs 20.00, Revisi Bab 3, anggaran makan Rp42.000 dari Rp100.000, katalog gerakan, kategori). Ada flag di DataStore agar seed hanya jalan sekali.
+- [x] `SeedData`: saat pertama kali dibuka, isi data contoh yang sama dengan desain (Push Day 17.00, coding test Awan Biru Labs 20.00, Revisi Bab 3, anggaran makan Rp42.000 dari Rp100.000, katalog gerakan, kategori). Ada flag di DataStore agar seed hanya jalan sekali.
 
 **Lapisan data & domain**
 - [x] Repository dasar per modul (baca saja dulu): `WorkoutRepository`, `CareerRepository`, `FinanceRepository`, `TaskRepository`

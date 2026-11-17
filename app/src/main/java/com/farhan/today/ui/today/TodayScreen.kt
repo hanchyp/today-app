@@ -294,7 +294,7 @@ fun TodayScreen(
 private fun TodayAgendaPreview() {
     val date = LocalDate.of(2026, 11, 11)
     val agenda = listOf(
-        AgendaItem("event:1", AgendaSource.CAREER, "1", "Interview", "Interview Android Developer", "GDP Labs", date, LocalTime.of(14, 30), false),
+        AgendaItem("event:1", AgendaSource.CAREER, "1", "Interview", "Interview Android Developer", "Awan Biru Labs", date, LocalTime.of(14, 30), false),
         AgendaItem("task:2", AgendaSource.TASK, "2", "Tugas", "Kirim revisi Bab 3", "Skripsi", date, LocalTime.of(9, 0), false),
         AgendaItem("bill:3", AgendaSource.FINANCE, "3", "Tagihan", "Internet rumah", "Rp250.000", date, null, false),
     )

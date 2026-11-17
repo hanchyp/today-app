@@ -45,7 +45,7 @@ class CareerRepositoryTest {
     @After fun tearDown() = db.close()
 
     private suspend fun newApp(status: ApplicationStatus = ApplicationStatus.APPLIED) =
-        repo.saveApplication(ApplicationInput(company = "GDP Labs", role = "Software Development Intern", status = status))
+        repo.saveApplication(ApplicationInput(company = "Awan Biru Labs", role = "Software Development Intern", status = status))
 
     private fun interview(appId: String, at: LocalDateTime = LocalDateTime.of(TestToday.plusDays(1), LocalTime.of(10, 0)), reminder: Int? = 30) =
         EventInput(appId, JobEventType.INTERVIEW, "", at, 60, EventMode.ONLINE, "meet.google.com/abc", reminder)
@@ -59,8 +59,8 @@ class CareerRepositoryTest {
         val id = newApp(ApplicationStatus.SAVED)
         repo.changeStatus(id, ApplicationStatus.APPLIED)
         repo.changeStatus(id, ApplicationStatus.APPLIED) // tidak berubah → tidak dicatat
-        repo.saveApplication(ApplicationInput("GDP Labs", "Software Development Intern", status = ApplicationStatus.CODING_TEST), id)
-        repo.saveApplication(ApplicationInput("GDP Labs", "SDE Intern", status = ApplicationStatus.CODING_TEST), id) // status sama
+        repo.saveApplication(ApplicationInput("Awan Biru Labs", "Software Development Intern", status = ApplicationStatus.CODING_TEST), id)
+        repo.saveApplication(ApplicationInput("Awan Biru Labs", "SDE Intern", status = ApplicationStatus.CODING_TEST), id) // status sama
 
         val history = repo.statusHistory(id).first()
         assertEquals(
@@ -78,7 +78,7 @@ class CareerRepositoryTest {
         val items = agenda.agendaBetween(TestToday.plusDays(1), TestToday.plusDays(1)).first()
         assertEquals(listOf("Interview"), items.map { it.title })
         assertEquals(id, items.single().sourceId) // kartu Kalender membuka detail lamaran
-        assertEquals("GDP Labs", items.single().subtitle)
+        assertEquals("Awan Biru Labs", items.single().subtitle)
 
         assertEquals(listOf(millisAt(TestToday.plusDays(1), 9, 30)), gateway.active.values.toList())
     }

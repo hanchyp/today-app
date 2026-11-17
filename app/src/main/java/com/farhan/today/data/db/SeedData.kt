@@ -77,8 +77,8 @@ class SeedData(private val db: TodayDatabase, private val clock: Clock) {
 
         // ---------------- Karier
         val c = db.careerDao()
-        val gdp = JobApplicationEntity(
-            company = "GDP Labs", role = "Software Development Intern", location = "Jakarta",
+        val awanBiru = JobApplicationEntity(
+            company = "Awan Biru Labs", role = "Software Development Intern", location = "Jakarta",
             source = "LinkedIn", status = ApplicationStatus.CODING_TEST, appliedDate = today.minusDays(9),
             notes = "Siapkan kamera dan latihan algoritma.", createdAt = now, updatedAt = now,
         )
@@ -90,9 +90,9 @@ class SeedData(private val db: TodayDatabase, private val clock: Clock) {
             company = "Ruang Digital", role = "Android Developer Intern", status = ApplicationStatus.SAVED,
             deadlineDate = today.plusDays(6), createdAt = now, updatedAt = now,
         )
-        listOf(gdp, studio, ruang).forEach { c.upsertApplication(it) }
+        listOf(awanBiru, studio, ruang).forEach { c.upsertApplication(it) }
         listOf(
-            gdp to listOf(null to ApplicationStatus.SAVED, ApplicationStatus.SAVED to ApplicationStatus.APPLIED, ApplicationStatus.APPLIED to ApplicationStatus.CODING_TEST),
+            awanBiru to listOf(null to ApplicationStatus.SAVED, ApplicationStatus.SAVED to ApplicationStatus.APPLIED, ApplicationStatus.APPLIED to ApplicationStatus.CODING_TEST),
             studio to listOf(null to ApplicationStatus.APPLIED),
             ruang to listOf(null to ApplicationStatus.SAVED),
         ).forEach { (app, changes) ->
@@ -107,14 +107,14 @@ class SeedData(private val db: TodayDatabase, private val clock: Clock) {
         }
         c.upsertEvent(
             JobEventEntity(
-                applicationId = gdp.id, type = JobEventType.CODING_TEST, title = "Coding test",
+                applicationId = awanBiru.id, type = JobEventType.CODING_TEST, title = "Coding test",
                 startAt = at(today, 20), durationMinutes = 90, mode = EventMode.ONLINE,
                 reminderMinutesBefore = 30, createdAt = now, updatedAt = now,
             )
         )
         c.upsertEvent(
             JobEventEntity(
-                applicationId = gdp.id, type = JobEventType.INTERVIEW, title = "Interview GDP Labs",
+                applicationId = awanBiru.id, type = JobEventType.INTERVIEW, title = "Interview Awan Biru Labs",
                 startAt = at(today.plusDays(1), 10), durationMinutes = 60, mode = EventMode.ONLINE,
                 reminderMinutesBefore = 30, createdAt = now, updatedAt = now,
             )

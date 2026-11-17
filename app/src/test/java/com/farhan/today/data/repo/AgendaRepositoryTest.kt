@@ -70,7 +70,7 @@ class AgendaRepositoryTest {
     @Test fun orderingTimedThenAllDay_andNoDuplicateFromSchedule() = runTest {
         val (agenda, _) = seeded(fixedClock())
         val tomorrow = agenda.agendaBetween(TestToday.plusDays(1), TestToday.plusDays(1)).first()
-        assertEquals(listOf("Interview GDP Labs", "Pull Day", "Revisi Bab 3"), tomorrow.map { it.title })
+        assertEquals(listOf("Interview Awan Biru Labs", "Pull Day", "Revisi Bab 3"), tomorrow.map { it.title })
         assertNull(tomorrow.last().time)
 
         // Hari ini Push Day punya sesi nyata dan jadwal mingguan → hanya muncul sekali

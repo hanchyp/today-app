@@ -397,7 +397,7 @@ private fun CalendarPreview() = TodayTheme {
             month = YearMonth.of(2026, 11), selected = today.plusDays(1), today = today,
             sourcesByDate = mapOf(today to setOf(AgendaSource.WORKOUT, AgendaSource.CAREER), today.plusDays(1) to setOf(AgendaSource.CAREER, AgendaSource.TASK)),
             selectedItems = listOf(
-                AgendaItem("a", AgendaSource.CAREER, "a", "Interview", "Interview GDP Labs", "GDP Labs", today.plusDays(1), LocalTime.of(10, 0), false),
+                AgendaItem("a", AgendaSource.CAREER, "a", "Interview", "Interview Awan Biru Labs", "Awan Biru Labs", today.plusDays(1), LocalTime.of(10, 0), false),
             ),
             loading = false,
         ),

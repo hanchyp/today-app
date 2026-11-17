@@ -34,7 +34,7 @@ private fun DetailScaffoldPreview() = TodayTheme {
         actions = { TopBarAction(R.drawable.ic_edit, "Ubah") {} },
         bottomBar = { PrimaryButton("Jadwalkan interview", icon = R.drawable.ic_calendar) {} },
     ) {
-        Text("GDP Labs", style = TodayType.Title, color = TodayColors.Headline)
+        Text("Awan Biru Labs", style = TodayType.Title, color = TodayColors.Headline)
         SearchField("", {}, "Cari perusahaan atau posisi")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Pill("Tahap: Interview", trailingIcon = R.drawable.ic_expand_more) {}

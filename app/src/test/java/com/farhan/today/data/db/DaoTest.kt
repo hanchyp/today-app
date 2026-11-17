@@ -64,14 +64,14 @@ class DaoTest {
 
     @Test fun career_eventsBetweenJoinCompany_andHideDeletedApplication() = runTest {
         val dao = db.careerDao()
-        val app = JobApplicationEntity(company = "GDP Labs", role = "Intern", status = ApplicationStatus.CODING_TEST, createdAt = now, updatedAt = now)
+        val app = JobApplicationEntity(company = "Awan Biru Labs", role = "Intern", status = ApplicationStatus.CODING_TEST, createdAt = now, updatedAt = now)
         dao.upsertApplication(app)
         dao.upsertEvent(JobEventEntity(applicationId = app.id, type = JobEventType.CODING_TEST, title = "Coding test", startAt = millisAt(TestToday, 20), durationMinutes = 90, mode = EventMode.ONLINE, createdAt = now, updatedAt = now))
         dao.upsertEvent(JobEventEntity(applicationId = app.id, type = JobEventType.INTERVIEW, title = "Interview", startAt = millisAt(TestToday.plusDays(3), 10), durationMinutes = 60, mode = EventMode.ONSITE, createdAt = now, updatedAt = now))
 
         val today = dao.eventsBetween(millisAt(TestToday, 0), millisAt(TestToday.plusDays(1), 0)).first()
         assertEquals(listOf("Coding test"), today.map { it.event.title })
-        assertEquals("GDP Labs", today.single().company)
+        assertEquals("Awan Biru Labs", today.single().company)
 
         dao.softDeleteApplication(app.id, now)
         assertTrue(dao.eventsBetween(0, Long.MAX_VALUE).first().isEmpty())

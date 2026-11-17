@@ -299,7 +299,7 @@ fun OnboardingScreen() {
                 ChoiceChips(listOf(false to "Data contoh", true to "Kosong"), startEmpty, { startEmpty = it })
                 Text(
                     if (startEmpty) "Semua data yang ada sekarang dihapus. Katalog gerakan dan kategori keuangan tetap disediakan."
-                    else "Data contoh (Push Day, GDP Labs, Skripsi, anggaran makan) bisa kamu ubah atau hapus kapan saja.",
+                    else "Data contoh (Push Day, Awan Biru Labs, Skripsi, anggaran makan) bisa kamu ubah atau hapus kapan saja.",
                     style = TodayType.Meta, color = if (startEmpty) TodayColors.Danger else TodayColors.Muted,
                 )
                 PrimaryButton("Mulai pakai Today", loading = finishing) { finishing = true; vm.finishOnboarding(name, modules, startEmpty) }

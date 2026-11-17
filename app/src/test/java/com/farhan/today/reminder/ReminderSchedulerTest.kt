@@ -44,10 +44,10 @@ class ReminderSchedulerTest {
     @After fun tearDown() = db.close()
 
     @Test fun schedule_setsAlarm_andReplacesPreviousForSameSource() = runTest {
-        val first = scheduler.schedule(ReminderSource.JOB_EVENT, "e1", millisAt(TestToday, 19, 30), "Coding test", "GDP Labs")!!
+        val first = scheduler.schedule(ReminderSource.JOB_EVENT, "e1", millisAt(TestToday, 19, 30), "Coding test", "Awan Biru Labs")!!
         assertEquals(millisAt(TestToday, 19, 30), gateway.active[first.id])
 
-        val second = scheduler.schedule(ReminderSource.JOB_EVENT, "e1", millisAt(TestToday, 19, 0), "Coding test", "GDP Labs")!!
+        val second = scheduler.schedule(ReminderSource.JOB_EVENT, "e1", millisAt(TestToday, 19, 0), "Coding test", "Awan Biru Labs")!!
         assertEquals(listOf(second.id), gateway.active.keys.toList())
         assertEquals(ReminderState.CANCELLED, db.reminderDao().byId(first.id)?.state)
         assertEquals(1, db.reminderDao().scheduled().size)
