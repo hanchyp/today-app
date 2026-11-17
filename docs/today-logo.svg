@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="588" height="200" viewBox="0 0 294 100" role="img" aria-labelledby="title">
+  <title id="title">Today</title>
+  <!-- Ikon "Matahari" (konsep K), 108 → 76 px -->
+  <g transform="translate(12 12) scale(0.7037)">
+    <rect width="108" height="108" rx="32" fill="#FFD23F"/>
+    <path d="M54 31 L54 22 M77 54 L86 54 M54 77 L54 86 M31 54 L22 54" stroke="#1A1A2E" stroke-width="8" stroke-linecap="round"/>
+    <path d="M70.3 37.7 L76.6 31.4 M70.3 70.3 L76.6 76.6 M37.7 70.3 L31.4 76.6 M37.7 37.7 L31.4 31.4" stroke="#FF5A36" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="54" cy="54" r="15" fill="#1A1A2E"/>
+  </g>
+  <g fill="none" stroke="#1A1A2E" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- T -->
+    <path d="M104 37 Q122 29 140 36 M123 34 C120 44 119 58 122 66"/>
+    <!-- o -->
+    <path d="M158 45 C150 45 146 50 146 56 C146 63 151 67 158 67 C165 67 170 62 170 55 C170 49 166 45 158 45 Z"/>
+    <!-- d -->
+    <path d="M204 32 L204 66 M204 51 C200 44 190 43 184 49 C178 55 182 67 191 67 C198 67 204 62 204 55"/>
+    <!-- a -->
+    <path d="M240 46 L240 66 M240 51 C236 44 226 43 220 49 C214 55 218 67 227 67 C234 67 240 62 240 55"/>
+    <!-- y -->
+    <path d="M253 46 C252 59 256 66 263 66 C271 66 276 57 277 46 C276 68 271 81 258 80"/>
+  </g>
+  <circle cx="286" cy="64" r="4.5" fill="#FF5A36"/>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108" role="img"><title>Today — Four petals</title>
+  <rect width="108" height="108" rx="32" fill="#5844DD"/>
+  <path d="M51 51 C51 37 44 30 30 30 C30 44 37 51 51 51 Z" fill="#C1EF7D"/>
+  <path d="M57 51 C57 37 64 30 78 30 C78 44 71 51 57 51 Z" fill="#FFE094"/>
+  <path d="M57 57 C71 57 78 64 78 78 C64 78 57 71 57 57 Z" fill="#F7BDE0"/>
+  <path d="M51 57 C37 57 30 64 30 78 C44 78 51 71 51 57 Z" fill="#C6D8FF"/>
+  <circle cx="54" cy="54" r="3.5" fill="#FBF9FE"/>
+</svg>

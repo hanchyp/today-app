@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108" role="img"><title>Today — Burst</title>
+  <rect width="108" height="108" rx="32" fill="#FF5A36"/>
+  <path d="M54.0 23.0 L60.5 29.9 L69.5 27.2 L71.7 36.3 L80.8 38.5 L78.1 47.5 L85.0 54.0 L78.1 60.5 L80.8 69.5 L71.7 71.7 L69.5 80.8 L60.5 78.1 L54.0 85.0 L47.5 78.1 L38.5 80.8 L36.3 71.7 L27.2 69.5 L29.9 60.5 L23.0 54.0 L29.9 47.5 L27.2 38.5 L36.3 36.3 L38.5 27.2 L47.5 29.9 Z" fill="#FFD23F" stroke="#FFD23F" stroke-width="3" stroke-linejoin="round" transform="rotate(8 54 54)"/>
+  <path d="M42 55 L51 64 L67 45" fill="none" stroke="#1A1A2E" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

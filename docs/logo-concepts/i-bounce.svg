@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108" role="img"><title>Today — Bounce</title>
+  <rect width="108" height="108" rx="32" fill="#C6F432"/>
+  <path d="M26 64 L46 50 M32 79 L54 64 M50 84 L62 76" stroke="#1A1A2E" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="67" cy="43" r="15" fill="#FF5A36"/>
+  <path d="M80 24 L83 30 M88 34 L82 36" stroke="#1A1A2E" stroke-width="4" stroke-linecap="round"/>
+</svg>

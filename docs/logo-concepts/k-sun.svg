@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108" role="img"><title>Today — Sun</title>
+  <rect width="108" height="108" rx="32" fill="#FFD23F"/>
+  <path d="M54.0 31.0 L54.0 22.0 M77.0 54.0 L86.0 54.0 M54.0 77.0 L54.0 86.0 M31.0 54.0 L22.0 54.0" stroke="#1A1A2E" stroke-width="8" stroke-linecap="round"/>
+  <path d="M70.3 37.7 L76.6 31.4 M70.3 70.3 L76.6 76.6 M37.7 70.3 L31.4 76.6 M37.7 37.7 L31.4 31.4" stroke="#FF5A36" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="54" cy="54" r="15" fill="#1A1A2E"/>
+</svg>
