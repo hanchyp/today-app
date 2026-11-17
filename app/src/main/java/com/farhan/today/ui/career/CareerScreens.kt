@@ -1,5 +1,31 @@
 package com.farhan.today.ui.career
 
+import androidx.compose.foundation.layout.heightIn
+
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.sp
+import com.farhan.today.ui.components.DetailScaffold
+import com.farhan.today.ui.components.LoadingDetail
+import com.farhan.today.ui.components.LoadingSkeleton
+import com.farhan.today.ui.components.ScreenColumn
+import com.farhan.today.ui.components.SearchField
+import com.farhan.today.ui.components.TodayFab
+import com.farhan.today.ui.components.TopBarAction
+import com.farhan.today.ui.components.fabExpanded
+import com.farhan.today.ui.components.rememberBackGuard
+import com.farhan.today.ui.theme.Spacing
+
 import android.Manifest
 import android.os.Build
 import android.widget.Toast
@@ -20,7 +46,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -68,7 +93,6 @@ import com.farhan.today.reminder.canPostNotifications
 import com.farhan.today.ui.components.ChoiceChips
 import com.farhan.today.ui.components.ConfirmDialog
 import com.farhan.today.ui.components.DateField
-import com.farhan.today.ui.components.DetailTopBar
 import com.farhan.today.ui.components.EmptyState
 import com.farhan.today.ui.components.FieldLabel
 import com.farhan.today.ui.components.ListCard
@@ -89,19 +113,6 @@ import java.time.Instant
 import java.time.ZoneId
 
 // ------------------------------------------------------------------ Bersama
-
-@Composable
-private fun ScrollColumn(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .statusBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        content = content,
-    )
-}
 
 fun ApplicationStatus.badgeColor(): Color = when (this) {
     ApplicationStatus.SAVED -> TodayColors.Chip
@@ -136,26 +147,28 @@ fun CareerRoute(onOpen: (String) -> Unit, onAdd: () -> Unit) {
     val vm: CareerListViewModel = viewModel(factory = vmFactory { CareerListViewModel(c.careerRepository) })
     val state by vm.state.collectAsStateWithLifecycle()
     val zone = c.clock.zone
+    val scroll = rememberScrollState()
 
-    ScrollColumn {
-        ScreenHeader("Lamaran", "Karier", "Pantau internship dan pekerjaan.") {
-            Pill("+ Tambah", selected = true, onClick = onAdd)
-        }
-        TodayTextField(state.query, vm::setQuery, "Cari perusahaan atau posisi", capitalization = KeyboardCapitalization.None)
-        ChoiceChips(
-            options = CareerFilter.entries.map { it to "${it.label} ${state.counts[it] ?: 0}" },
-            selected = state.filter, onSelect = vm::setFilter,
-        )
-        when {
-            state.loading -> {}
-            state.total == 0 -> EmptyState(
-                "Belum ada lamaran",
-                "Simpan lowongan yang menarik, lalu pantau statusnya sampai offer.",
-                action = { Pill("+ Tambah lamaran", selected = true, onClick = onAdd) },
+    Box(Modifier.fillMaxSize()) {
+        ScreenColumn(state = scroll, bottomPadding = Spacing.FabClearance) {
+            ScreenHeader("Lamaran", "Karier", "Pantau internship dan pekerjaan.")
+            SearchField(state.query, vm::setQuery, "Cari perusahaan atau posisi")
+            ChoiceChips(
+                options = CareerFilter.entries.map { it to "${it.label} ${state.counts[it] ?: 0}" },
+                selected = state.filter, onSelect = vm::setFilter,
             )
-            state.rows.isEmpty() -> EmptyState("Tidak ada yang cocok", "Coba filter atau kata kunci lain.")
-            else -> state.rows.forEach { ApplicationCard(it, zone) { onOpen(it.application.id) } }
+            when {
+                state.loading -> LoadingSkeleton(rows = 3, showHeader = false)
+                state.total == 0 -> EmptyState(
+                    "Belum ada lamaran",
+                    "Simpan lowongan yang menarik, lalu pantau statusnya sampai offer.",
+                    action = { Pill("+ Tambah lamaran", selected = true, onClick = onAdd) },
+                )
+                state.rows.isEmpty() -> EmptyState("Tidak ada yang cocok", "Coba filter atau kata kunci lain.")
+                else -> state.rows.forEach { ApplicationCard(it, zone) { onOpen(it.application.id) } }
+            }
         }
+        TodayFab("Lamaran", scroll.fabExpanded, Modifier.align(Alignment.BottomEnd), onClick = onAdd)
     }
 }
 
@@ -197,6 +210,7 @@ private fun ApplicationCard(row: ApplicationRow, zone: ZoneId, onClick: () -> Un
 
 // ------------------------------------------------------------------ 04 · Detail lamaran
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ApplicationDetailRoute(
     id: String,
@@ -218,27 +232,35 @@ fun ApplicationDetailRoute(
     var deleteDialog by remember { mutableStateOf(false) }
 
     val app = state.application
-    if (state.loading) return
+    if (state.loading) {
+        LoadingDetail("Detail lamaran", onBack)
+        return
+    }
     if (app == null) {
         LaunchedEffect(Unit) { onBack() }
+        LoadingDetail("Detail lamaran", onBack)
         return
     }
 
-    ScrollColumn {
-        DetailTopBar(onBack) { Pill("Ubah", onClick = onEdit) }
-
+    DetailScaffold(
+        title = "Detail lamaran",
+        onBack = onBack,
+        actions = { TopBarAction(R.drawable.ic_edit, "Ubah lamaran", onClick = onEdit) },
+        // Aksi utama selalu terlihat, tidak terkubur di bawah riwayat (B5).
+        bottomBar = { PrimaryButton("Jadwalkan interview", icon = R.drawable.ic_calendar) { onSchedule(null) } },
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             CompanyLogo(app.company, 56)
             Column(Modifier.weight(1f)) {
-                Text("DETAIL LAMARAN", style = TodayType.Eyebrow, color = TodayColors.Brand)
-                Text(app.company, style = TodayType.Display, color = TodayColors.Headline, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text("LAMARAN", style = TodayType.Eyebrow, color = TodayColors.Brand)
+                Text(app.company, style = TodayType.Title, color = TodayColors.Headline, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
         Text(app.role, style = TodayType.CardTitle, color = TodayColors.Ink)
         val meta = listOf(app.location, app.source).filter { it.isNotBlank() }
         if (meta.isNotEmpty()) Text(meta.joinToString(" · "), style = TodayType.Meta, color = TodayColors.Muted)
         if (app.url.isNotBlank()) {
-            SecondaryButton("Buka link lowongan ↗") {
+            SecondaryButton("Buka link lowongan", icon = R.drawable.ic_open_in_new) {
                 val url = lowonganWebUrl(app.url)
                 val message = if (url == null) {
                     "Link lowongan tidak valid."
@@ -254,10 +276,13 @@ fun ApplicationDetailRoute(
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.clip(RoundedCornerShape(14.dp)).clickable(role = Role.Button) { statusDialog = true }) {
-                StatusBadge("Tahap: ${app.status.label()} ▾", background = app.status.badgeColor())
-            }
-            state.lastUpdated?.let { Text("Diperbarui ${relativeDay(it, today).lowercase()}", style = TodayType.Meta, color = TodayColors.Muted) }
+            Pill(
+                "Tahap: ${app.status.label()}", background = app.status.badgeColor(),
+                trailingIcon = R.drawable.ic_expand_more,
+                modifier = Modifier.semantics { contentDescription = "Tahap ${app.status.label()}, ketuk untuk mengubah" },
+                onClick = { statusDialog = true },
+            )
+            state.lastUpdated?.let { Text("Diperbarui ${relativeDay(it, today).lowercase()}", style = TodayType.Meta, color = TodayColors.Muted, modifier = Modifier.weight(1f)) }
         }
 
         StatusStepper(app.status)
@@ -293,11 +318,12 @@ fun ApplicationDetailRoute(
                         Text(listOfNotNull(change.fromStatus?.label(), change.toStatus.label()).joinToString(" → "), style = TodayType.Label)
                         Text(com.farhan.today.domain.formatLongDate(changedDate), style = TodayType.Meta)
                     }
-                    TextButton(onClick = { deletingChange = change.id }) { Text("Hapus", color = TodayColors.Danger) }
+                    IconButton(onClick = { deletingChange = change.id }) {
+                        Icon(painterResource(R.drawable.ic_delete), "Hapus riwayat tahap", tint = TodayColors.Muted)
+                    }
                 }
             }
         }
-        PrimaryButton("Jadwalkan interview") { onSchedule(null) }
         SecondaryButton("Lihat kalender") {
             onOpenCalendar(state.nextEvent?.let { Instant.ofEpochMilli(it.startAt).atZone(zone).toLocalDate() })
         }
@@ -312,18 +338,24 @@ fun ApplicationDetailRoute(
             onDismiss = { deletingChange = null }, destructive = true)
     }
     if (statusDialog) {
-        AlertDialog(
-            onDismissRequest = { statusDialog = false },
-            title = { Text("Ubah tahap lamaran", style = TodayType.CardTitle) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ApplicationStatus.entries.forEach { s ->
-                        Pill(s.label(), Modifier.fillMaxWidth(), selected = s == app.status, onClick = { vm.changeStatus(s); statusDialog = false })
+        ModalBottomSheet(onDismissRequest = { statusDialog = false }, containerColor = TodayColors.Background) {
+            Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp).selectableGroup()) {
+                Text("Ubah tahap lamaran", style = TodayType.Section, color = TodayColors.Ink, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+                ApplicationStatus.entries.forEach { s ->
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                            .selectable(selected = s == app.status, role = Role.RadioButton) { vm.changeStatus(s); statusDialog = false }
+                            .padding(horizontal = 20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        RadioButton(selected = s == app.status, onClick = null, colors = RadioButtonDefaults.colors(selectedColor = TodayColors.Ink))
+                        Text(s.label(), style = TodayType.Body, color = TodayColors.Ink, modifier = Modifier.weight(1f))
+                        Box(Modifier.size(12.dp).clip(CircleShape).background(s.badgeColor()).border(1.dp, TodayColors.NavStroke, CircleShape))
                     }
                 }
-            },
-            confirmButton = { TextButton(onClick = { statusDialog = false }) { Text("Tutup") } },
-        )
+            }
+        }
     }
     if (deleteDialog) {
         ConfirmDialog(
@@ -369,7 +401,7 @@ private fun StatusStepper(status: ApplicationStatus) {
                         .border(2.dp, if (reached) TodayColors.Ink else TodayColors.NavStroke, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (!closed && i < current) Text("✓", style = TodayType.Tiny, color = Color.White)
+                    if (!closed && i < current) Icon(painterResource(R.drawable.ic_check), null, Modifier.size(14.dp), tint = Color.White)
                     if (!closed && i == current) Box(Modifier.size(8.dp).clip(CircleShape).background(TodayColors.Ink))
                 }
                 if (i < stages.lastIndex) {
@@ -380,7 +412,7 @@ private fun StatusStepper(status: ApplicationStatus) {
         Row(Modifier.fillMaxWidth()) {
             labels.forEachIndexed { i, l ->
                 Text(
-                    l, Modifier.weight(1f), style = TodayType.Tiny,
+                    l, Modifier.weight(1f), style = TodayType.Meta.copy(fontSize = 12.sp),
                     color = if (!closed && i <= current) TodayColors.Ink else TodayColors.Muted,
                     textAlign = when (i) { 0 -> TextAlign.Start; labels.lastIndex -> TextAlign.End; else -> TextAlign.Center },
                 )
@@ -407,7 +439,7 @@ private fun NextEventCard(event: JobEventEntity?, zone: ZoneId, onEdit: (String?
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text("AGENDA BERIKUTNYA  ·  ${event.type.label().uppercase()}", style = TodayType.Eyebrow, color = TodayColors.Ink)
-        Text(event.title, style = TodayType.Hero, color = TodayColors.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(event.title, style = TodayType.Section, color = TodayColors.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text("${formatLongDate(at.toLocalDate())} · ${formatTime(at.toLocalTime())}–${formatTime(end.toLocalTime())}", style = TodayType.Label, color = TodayColors.Ink)
         Text(
             listOfNotNull(
@@ -434,7 +466,12 @@ private fun EventRow(e: JobEventEntity, zone: ZoneId, onClick: () -> Unit, onTog
                 Text(e.title, style = TodayType.Label.copy(fontSize = TodayType.Body.fontSize), color = TodayColors.Ink)
                 Text(eventWhen(e.startAt, zone), style = TodayType.Meta, color = TodayColors.Muted)
             }
-            Pill(if (e.done) "Selesai ✓" else "Selesai?", selected = e.done, onClick = onToggle)
+            Pill(
+                if (e.done) "Selesai" else "Tandai", selected = e.done,
+                icon = if (e.done) R.drawable.ic_check else null,
+                modifier = Modifier.semantics { stateDescription = if (e.done) "Selesai" else "Belum selesai" },
+                onClick = onToggle,
+            )
         }
     }
 }
@@ -445,18 +482,25 @@ private fun EventRow(e: JobEventEntity, zone: ZoneId, onClick: () -> Unit, onTog
 fun ApplicationFormRoute(id: String?, onBack: () -> Unit, onSaved: (String) -> Unit) {
     val c = LocalContext.current.appContainer
     val vm: ApplicationFormViewModel = viewModel(factory = vmFactory { ApplicationFormViewModel(c.careerRepository, id) })
-    if (!vm.loaded) return
+    val title = if (vm.isEdit) "Ubah lamaran" else "Lamaran baru"
+    if (!vm.loaded) {
+        LoadingDetail(title, onBack)
+        return
+    }
+    val back = rememberBackGuard(vm.dirty, onBack)
 
-    ScrollColumn {
-        DetailTopBar(onBack)
-        Text(if (vm.isEdit) "UBAH LAMARAN" else "LAMARAN BARU", style = TodayType.Eyebrow, color = TodayColors.Brand)
-        Text(if (vm.isEdit) vm.company.ifBlank { "Lamaran" } else "Tambah lamaran", style = TodayType.Display, color = TodayColors.Headline)
-
+    DetailScaffold(
+        title = title,
+        onBack = back,
+        bottomBar = {
+            PrimaryButton(if (vm.isEdit) "Simpan perubahan" else "Simpan lamaran", loading = vm.saving) { vm.save(onSaved) }
+        },
+    ) {
         TodayTextField(vm.company, { vm.company = it }, "Perusahaan *", error = if (vm.showErrors && vm.company.isBlank()) "Wajib diisi" else null, capitalization = KeyboardCapitalization.Words)
         TodayTextField(vm.role, { vm.role = it }, "Posisi *", error = if (vm.showErrors && vm.role.isBlank()) "Wajib diisi" else null, capitalization = KeyboardCapitalization.Words)
         TodayTextField(vm.location, { vm.location = it }, "Lokasi", placeholder = "Jakarta / Remote", capitalization = KeyboardCapitalization.Words)
         TodayTextField(vm.source, { vm.source = it }, "Sumber", placeholder = "LinkedIn, Glints, referral…")
-        TodayTextField(vm.url, { vm.url = it }, "Link lowongan", capitalization = KeyboardCapitalization.None)
+        TodayTextField(vm.url, { vm.url = it }, "Link lowongan", capitalization = KeyboardCapitalization.None, keyboardType = KeyboardType.Uri)
 
         FieldLabel("Tahap")
         ChoiceChips(ApplicationStatus.entries.map { it to it.label() }, vm.status, { vm.status = it })
@@ -465,9 +509,6 @@ fun ApplicationFormRoute(id: String?, onBack: () -> Unit, onSaved: (String) -> U
         FieldLabel("Deadline lamaran")
         DateField(vm.deadlineDate, { vm.deadlineDate = it }, placeholder = "Tidak ada", clearable = true)
         TodayTextField(vm.notes, { vm.notes = it }, "Catatan", singleLine = false)
-
-        Spacer(Modifier.height(8.dp))
-        PrimaryButton(if (vm.isEdit) "Simpan perubahan" else "Simpan lamaran") { vm.save(onSaved) }
     }
 }
 
@@ -496,12 +537,22 @@ fun ScheduleEventRoute(
         vm.save { _, promote -> if (promote != null) promotion = promote else onSaved(vm.date) }
     }
 
-    ScrollColumn {
-        DetailTopBar(onBack) {
-            if (vm.isEdit) Pill("Hapus", contentColor = TodayColors.Danger, onClick = { deleteDialog = true })
-        }
-        Text((app?.company ?: "").uppercase(), style = TodayType.Eyebrow, color = TodayColors.Brand)
-        Text(if (vm.isEdit) "Ubah agenda" else "Jadwalkan\ninterview", style = TodayType.Display, color = TodayColors.Headline)
+    val screenTitle = if (vm.isEdit) "Ubah agenda" else "Jadwalkan agenda"
+    if (!vm.loaded) {
+        LoadingDetail(screenTitle, onBack)
+        return
+    }
+    val back = rememberBackGuard(vm.dirty, onBack)
+
+    DetailScaffold(
+        title = screenTitle,
+        onBack = back,
+        actions = {
+            if (vm.isEdit) TopBarAction(R.drawable.ic_delete, "Hapus agenda", tint = TodayColors.Danger) { deleteDialog = true }
+        },
+        bottomBar = { PrimaryButton("Simpan ke kalender", loading = vm.saving) { save() } },
+    ) {
+        if (app != null) Text(app.company.uppercase(), style = TodayType.Eyebrow, color = TodayColors.Brand)
 
         FieldLabel("Jenis")
         ChoiceChips(JobEventType.entries.map { it to it.label() }, vm.type, { vm.type = it })
@@ -520,14 +571,13 @@ fun ScheduleEventRoute(
             vm.link, { vm.link = it },
             if (vm.mode == EventMode.ONLINE) "Link meeting" else "Alamat",
             capitalization = if (vm.mode == EventMode.ONLINE) KeyboardCapitalization.None else KeyboardCapitalization.Words,
+            keyboardType = if (vm.mode == EventMode.ONLINE) KeyboardType.Uri else KeyboardType.Text,
+            imeAction = ImeAction.Done,
         )
         FieldLabel("Pengingat")
         ChoiceChips(ReminderOptions, vm.reminder, { vm.reminder = it })
 
         Text("Jadwal akan muncul di Kalender dengan warna Karier.", style = TodayType.Meta, color = TodayColors.Muted)
-        Spacer(Modifier.height(4.dp))
-        PrimaryButton(if (vm.saving) "Menyimpan…" else "Simpan ke kalender") { save() }
-        Spacer(Modifier.width(1.dp))
     }
 
     promotion?.let { target ->

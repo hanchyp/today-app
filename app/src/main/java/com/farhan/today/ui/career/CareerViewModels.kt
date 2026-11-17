@@ -126,8 +126,14 @@ class ApplicationFormViewModel(private val repo: CareerRepository, private val i
     var showErrors by mutableStateOf(false)
     var loaded by mutableStateOf(id == null)
         private set
+    var saving by mutableStateOf(false)
+        private set
 
     val isEdit = id != null
+
+    /** Isian saat form dibuka; dibandingkan untuk konfirmasi "Buang perubahan?". */
+    private var initial by mutableStateOf(input())
+    val dirty: Boolean get() = loaded && !saving && input() != initial
 
     init {
         if (id != null) viewModelScope.launch {
@@ -135,6 +141,7 @@ class ApplicationFormViewModel(private val repo: CareerRepository, private val i
                 company = it.company; role = it.role; location = it.location; url = it.url; source = it.source
                 status = it.status; appliedDate = it.appliedDate; deadlineDate = it.deadlineDate; notes = it.notes
             }
+            initial = input()
             loaded = true
         }
     }
@@ -142,8 +149,10 @@ class ApplicationFormViewModel(private val repo: CareerRepository, private val i
     private fun input() = ApplicationInput(company, role, location, url, source, status, appliedDate, deadlineDate, notes)
 
     fun save(onSaved: (String) -> Unit) {
+        if (saving) return
         val input = input()
         if (!input.isValid) { showErrors = true; return }
+        saving = true
         viewModelScope.launch { onSaved(repo.saveApplication(input, id)) }
     }
 }
@@ -174,6 +183,13 @@ class ScheduleEventViewModel(
         private set
 
     val isEdit = eventId != null
+    var loaded by mutableStateOf(false)
+        private set
+
+    private fun snapshot(): List<Any?> = listOf(type, title, date, time, duration, mode, link, reminder)
+    private var initial by mutableStateOf(snapshot())
+    /** Ada isian yang berubah sejak form dibuka (untuk konfirmasi saat kembali). */
+    val dirty: Boolean get() = loaded && !saving && snapshot() != initial
 
     init {
         viewModelScope.launch {
@@ -184,6 +200,8 @@ class ScheduleEventViewModel(
                 type = e.type; title = e.title; date = start.toLocalDate(); time = start.toLocalTime().withSecond(0).withNano(0)
                 duration = e.durationMinutes; mode = e.mode; link = e.locationOrLink; reminder = e.reminderMinutesBefore
             }
+            initial = snapshot()
+            loaded = true
         }
     }
 
