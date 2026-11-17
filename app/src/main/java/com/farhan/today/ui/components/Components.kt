@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,6 +31,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -126,21 +129,19 @@ fun HeroCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Box(
+    Row(
         modifier
             .fillMaxWidth()
             .clip(TodayShapes.Hero)
             .background(color)
             .clickableIf(onClick)
-            .padding(20.dp)
+            .padding(20.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        Column(Modifier.weight(1f), content = content)
         if (mascot != null) {
-            Image(
-                painterResource(mascot), mascotDescription,
-                modifier = Modifier.align(Alignment.TopEnd).size(width = 96.dp, height = 78.dp),
-            )
+            Image(painterResource(mascot), mascotDescription, Modifier.size(width = 80.dp, height = 64.dp))
         }
-        Column(content = content)
     }
 }
 
@@ -173,6 +174,7 @@ fun Pill(
     background: Color = if (selected) TodayColors.Ink else TodayColors.Chip,
     contentColor: Color = if (selected) Color.White else TodayColors.Ink,
     @DrawableRes icon: Int? = null,
+    @DrawableRes trailingIcon: Int? = null,
     onClick: (() -> Unit)? = null,
 ) {
     Row(
@@ -186,7 +188,8 @@ fun Pill(
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
     ) {
         if (icon != null) Icon(painterResource(icon), null, tint = contentColor, modifier = Modifier.size(18.dp))
-        Text(text, style = TodayType.Label, color = contentColor, maxLines = 1)
+        if (text.isNotEmpty()) Text(text, style = TodayType.Label, color = contentColor, maxLines = 1)
+        if (trailingIcon != null) Icon(painterResource(trailingIcon), null, tint = contentColor, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -213,31 +216,49 @@ fun StatusBadge(
     }
 }
 
+/**
+ * Tombol utama full-width. [loading] menampilkan spinner dan menolak ketukan,
+ * sehingga simpan tidak terkirim dua kali; [enabled] = false meredupkan tombol.
+ */
 @Composable
 fun PrimaryButton(
     text: String,
     modifier: Modifier = Modifier,
     background: Color = TodayColors.Brand,
     contentColor: Color = Color.White,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    @DrawableRes icon: Int? = null,
     onClick: () -> Unit,
 ) {
-    Box(
+    val active = enabled && !loading
+    Row(
         modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .heightIn(min = 52.dp)
             .clip(TodayShapes.Button)
-            .background(background)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 18.dp),
-        contentAlignment = Alignment.CenterStart,
+            .background(if (enabled) background else background.copy(alpha = 0.38f))
+            .clickable(enabled = active, role = Role.Button, onClick = onClick)
+            .semantics { if (loading) stateDescription = "Sedang memproses" }
+            .padding(horizontal = 18.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text, style = TodayType.Label.copy(fontSize = 15.sp), color = contentColor)
+        val tint = if (enabled) contentColor else contentColor.copy(alpha = 0.6f)
+        if (loading) CircularProgressIndicator(Modifier.size(18.dp), color = tint, strokeWidth = 2.dp)
+        else if (icon != null) Icon(painterResource(icon), null, tint = tint, modifier = Modifier.size(20.dp))
+        Text(text, style = TodayType.Label.copy(fontSize = 15.sp), color = tint, textAlign = TextAlign.Center)
     }
 }
 
 @Composable
-fun SecondaryButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) =
-    PrimaryButton(text, modifier, background = TodayColors.Chip, contentColor = TodayColors.Ink, onClick = onClick)
+fun SecondaryButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    @DrawableRes icon: Int? = null,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) = PrimaryButton(text, modifier, background = TodayColors.Chip, contentColor = TodayColors.Ink, enabled = enabled, icon = icon, onClick = onClick)
 
 @Composable
 fun ProgressBar(
@@ -276,7 +297,7 @@ fun MoneyText(
 ) {
     Text(
         if (signed) formatSignedRupiah(amount, isIncome) else formatRupiah(amount),
-        modifier = modifier, style = style, color = color, textAlign = TextAlign.End, maxLines = 1,
+        modifier = modifier, style = style.copy(fontFeatureSettings = "tnum"), color = color, textAlign = TextAlign.End, maxLines = 1,
     )
 }
 
@@ -313,12 +334,5 @@ fun AgendaDots(colors: List<Color>, modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-fun BackPill(onClick: () -> Unit) = Pill("‹ Kembali", onClick = onClick)
-
-@Composable
-fun BoxScope.LoadingPlaceholder() {
-    Text("Memuat…", Modifier.align(Alignment.Center), style = TodayType.Body, color = TodayColors.Muted)
-}
 
 val ArrowIcon = R.drawable.ic_arrow_open

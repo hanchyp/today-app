@@ -1,6 +1,27 @@
 package com.farhan.today.ui
 
 import androidx.annotation.DrawableRes
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.Alignment
+import androidx.navigation.NavBackStackEntry
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
@@ -96,6 +117,10 @@ object Routes {
     fun workoutSummary(id: String, celebrate: Boolean = false) = "workout/summary/$id?celebrate=$celebrate"
     fun exercise(id: String) = "exercise/$id"
 
+    /** Rute akar tab: hanya di sini bottom nav tampil, dan antar-rute ini transisinya "fade through". */
+    private val tabRoots = setOf(TODAY, WORKOUT, WORKOUT_PLAN, CAREER, FINANCE, FinanceRoutes.ADD, TASKS)
+    fun isTabRoot(route: String?): Boolean = route == null || route in tabRoots
+
     /** Tab bawah yang aktif untuk sebuah rute. */
     fun tabOf(route: String?): String? = when {
         route == null -> null
@@ -149,18 +174,34 @@ private fun MainShell(deepLink: String?, onDeepLinkHandled: () -> Unit) {
         }
     }
 
+    // Tiap layar mengurus inset status bar sendiri, supaya latar layar (krem, putih, gelap)
+    // ikut menutupi area status bar. Scaffold hanya menyisakan ruang untuk bottom nav.
     Scaffold(
         containerColor = TodayColors.Background,
+        contentWindowInsets = WindowInsets(0),
         bottomBar = {
-            BottomNav(tabs.filter { it.module == null || it.module in enabled }, activeTab) { route ->
-                if (route == Routes.TODAY && entry?.destination?.route != Routes.TODAY) {
-                    if (!nav.popBackStack(Routes.TODAY, inclusive = false)) nav.goTab(Routes.TODAY)
+            AnimatedVisibility(
+                visible = Routes.isTabRoot(entry?.destination?.route),
+                enter = slideInVertically(tween(250, easing = EmphasizedDecelerate)) { it } + expandVertically(tween(250, easing = EmphasizedDecelerate), expandFrom = Alignment.Top),
+                exit = slideOutVertically(tween(200, easing = EmphasizedAccelerate)) { it } + shrinkVertically(tween(200, easing = EmphasizedAccelerate), shrinkTowards = Alignment.Top),
+            ) {
+                BottomNav(tabs.filter { it.module == null || it.module in enabled }, activeTab) { route ->
+                    if (route == Routes.TODAY && entry?.destination?.route != Routes.TODAY) {
+                        if (!nav.popBackStack(Routes.TODAY, inclusive = false)) nav.goTab(Routes.TODAY)
+                    }
+                    else nav.goTab(route)
                 }
-                else nav.goTab(route)
             }
         },
     ) { inner ->
-        NavHost(nav, startDestination = Routes.TODAY, modifier = Modifier.padding(inner).consumeWindowInsets(inner)) {
+        NavHost(
+            nav, startDestination = Routes.TODAY,
+            modifier = Modifier.padding(inner).consumeWindowInsets(inner),
+            enterTransition = { if (tabSwitch()) fadeThroughIn() else sharedAxisIn(forward = true) },
+            exitTransition = { if (tabSwitch()) fadeThroughOut() else sharedAxisOut(forward = true) },
+            popEnterTransition = { if (tabSwitch()) fadeThroughIn() else sharedAxisIn(forward = false) },
+            popExitTransition = { if (tabSwitch()) fadeThroughOut() else sharedAxisOut(forward = false) },
+        ) {
             composable(Routes.TODAY) { TodayRoute(enabled, onNavigate = { nav.navigate(it) }) }
             composable(
                 Routes.CALENDAR,
@@ -177,6 +218,7 @@ private fun MainShell(deepLink: String?, onDeepLinkHandled: () -> Unit) {
                     openAdd = e.arguments?.getBoolean("add") == true,
                     modules = enabled,
                     onNavigate = { nav.navigate(it) },
+                    onBack = { if (!nav.popBackStack()) nav.goTab(Routes.TODAY) },
                 )
             }
             // ---------------- Latihan
@@ -273,11 +315,16 @@ private fun MainShell(deepLink: String?, onDeepLinkHandled: () -> Unit) {
 
             // ---------------- Tugas
             composable(Routes.TASKS) { TasksRoute(onOpenProject = { nav.navigate(Routes.project(it)) }) }
+            // Dari notifikasi/deep link: daftar Tugas tetap tampil di belakang sheet,
+            // bukan layar kosong. Dari Today, sheet dibuka langsung tanpa navigasi.
             composable(Routes.TASK_FORM, arguments = listOf(navArgument("task") { defaultValue = "" })) { e ->
-                com.farhan.today.ui.tasks.TaskFormDestination(
-                    taskId = e.arguments?.getString("task")?.ifEmpty { null },
-                    onBack = { nav.popBackStack() },
-                )
+                Box(Modifier.fillMaxSize()) {
+                    TasksRoute(onOpenProject = { nav.navigate(Routes.project(it)) })
+                    com.farhan.today.ui.tasks.TaskFormDestination(
+                        taskId = e.arguments?.getString("task")?.ifEmpty { null },
+                        onBack = { nav.popBackStack() },
+                    )
+                }
             }
             composable(Routes.PROJECT) { e ->
                 ProjectDetailRoute(e.arguments?.getString("id").orEmpty(), onBack = { nav.popBackStack() })
@@ -285,6 +332,32 @@ private fun MainShell(deepLink: String?, onDeepLinkHandled: () -> Unit) {
         }
     }
 }
+
+// ---------------------------------------------------------------- Transisi (Material motion)
+
+private val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
+private val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
+private const val AXIS_MS = 300
+
+/** Pindah antar-tab (kedua ujung adalah akar tab) → fade through, bukan geser. */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.tabSwitch(): Boolean =
+    Routes.isTabRoot(initialState.destination.route) && Routes.isTabRoot(targetState.destination.route)
+
+/** Fade through: halaman lama hilang cepat (90 ms), lalu halaman baru muncul + membesar sedikit. */
+private fun fadeThroughIn(): EnterTransition =
+    fadeIn(tween(210, delayMillis = 90, easing = LinearOutSlowInEasing)) +
+        scaleIn(tween(210, delayMillis = 90, easing = LinearOutSlowInEasing), initialScale = 0.94f)
+
+private fun fadeThroughOut(): ExitTransition = fadeOut(tween(90, easing = FastOutLinearInEasing))
+
+/** Shared axis X: geser pendek (~8% lebar) + fade, agar tidak ada dua halaman transparan bertumpuk lama. */
+private fun sharedAxisIn(forward: Boolean): EnterTransition =
+    slideInHorizontally(tween(AXIS_MS, easing = FastOutSlowInEasing)) { w -> (if (forward) 1 else -1) * w / 12 } +
+        fadeIn(tween(210, delayMillis = 90, easing = LinearOutSlowInEasing))
+
+private fun sharedAxisOut(forward: Boolean): ExitTransition =
+    slideOutHorizontally(tween(AXIS_MS, easing = FastOutSlowInEasing)) { w -> (if (forward) -1 else 1) * w / 12 } +
+        fadeOut(tween(90, easing = FastOutLinearInEasing))
 
 private fun NavHostController.goTab(route: String) = navigate(route) {
     popUpTo(graph.findStartDestination().id) { saveState = true }

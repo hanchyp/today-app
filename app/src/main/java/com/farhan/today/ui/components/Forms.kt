@@ -13,6 +13,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TimeInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.farhan.today.R
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -35,6 +46,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -78,6 +92,7 @@ fun TodayTextField(
     keyboardType: KeyboardType = KeyboardType.Text,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     leadingIcon: (@Composable () -> Unit)? = null,
+    imeAction: ImeAction = if (singleLine) ImeAction.Next else ImeAction.Default,
 ) {
     OutlinedTextField(
         value = value,
@@ -93,7 +108,7 @@ fun TodayTextField(
         shape = TodayShapes.Chip,
         textStyle = TodayType.Body,
         visualTransformation = visualTransformation,
-        keyboardOptions = KeyboardOptions(capitalization = capitalization, keyboardType = keyboardType, imeAction = if (singleLine) ImeAction.Next else ImeAction.Default),
+        keyboardOptions = KeyboardOptions(capitalization = capitalization, keyboardType = keyboardType, imeAction = imeAction),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = TodayColors.Surface,
             unfocusedContainerColor = TodayColors.Surface,
@@ -159,7 +174,8 @@ fun PickerRow(value: String, modifier: Modifier = Modifier, placeholder: Boolean
             style = TodayType.Label.copy(fontSize = TodayType.Body.fontSize),
             color = if (placeholder) TodayColors.Muted else TodayColors.Ink,
         )
-        Text("Ubah ›", style = TodayType.Label, color = TodayColors.Brand)
+        Text("Ubah", style = TodayType.Label, color = TodayColors.Brand)
+        Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.size(18.dp), tint = TodayColors.Brand)
     }
 }
 
@@ -170,13 +186,18 @@ fun <T> ChoiceChips(
     selected: T,
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
+    icon: ((T) -> Int?)? = null,
 ) {
     Row(
-        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         options.forEach { (value, label) ->
-            Pill(label, selected = value == selected, onClick = { onSelect(value) })
+            Pill(
+                label, selected = value == selected, icon = icon?.invoke(value),
+                modifier = Modifier.semantics { this.selected = value == selected },
+                onClick = { onSelect(value) },
+            )
         }
     }
 }
@@ -225,21 +246,42 @@ fun TimeField(
     clearable: Boolean = false,
 ) {
     var open by remember { mutableStateOf(false) }
-    PickerRow(time?.let { formatTime(it) + " WIB" } ?: placeholder, modifier, placeholder = time == null) { open = true }
+    PickerRow(time?.let { formatTime(it) } ?: placeholder, modifier, placeholder = time == null) { open = true }
     if (open) {
         val initial = time ?: LocalTime.of(10, 0)
         val state = rememberTimePickerState(initialHour = initial.hour, initialMinute = initial.minute, is24Hour = true)
-        AlertDialog(
-            onDismissRequest = { open = false },
-            confirmButton = { TextButton(onClick = { onChange(LocalTime.of(state.hour, state.minute)); open = false }) { Text("Pilih") } },
-            dismissButton = {
-                Row {
+        // Jam analog butuh ~300dp; di layar pendek/landscape pakai input keyboard.
+        val roomy = LocalConfiguration.current.screenHeightDp >= 560
+        var dial by remember { mutableStateOf(roomy) }
+        Dialog(onDismissRequest = { open = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Column(
+                Modifier
+                    .padding(horizontal = 24.dp)
+                    .widthIn(max = 360.dp)
+                    .clip(TodayShapes.Hero)
+                    .background(TodayColors.Surface)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text("Pilih jam", style = TodayType.CardTitle, color = TodayColors.Ink, modifier = Modifier.fillMaxWidth())
+                if (dial) TimePicker(state = state) else TimeInput(state = state)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { dial = !dial }) {
+                        Icon(
+                            painterResource(if (dial) R.drawable.ic_keyboard else R.drawable.ic_schedule),
+                            if (dial) "Ketik jam" else "Pilih dari jam",
+                            tint = TodayColors.Muted,
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
                     if (clearable && time != null) TextButton(onClick = { onChange(null); open = false }) { Text("Hapus") }
                     TextButton(onClick = { open = false }) { Text("Batal") }
+                    TextButton(onClick = { onChange(LocalTime.of(state.hour, state.minute)); open = false }) { Text("Pilih") }
                 }
-            },
-            text = { TimePicker(state = state) },
-        )
+            }
+        }
     }
 }
 
@@ -264,16 +306,6 @@ fun ConfirmDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(dismissLabel) } },
     )
-}
-
-/** Header layar turunan: tombol kembali + aksi kanan opsional. */
-@Composable
-fun DetailTopBar(onBack: () -> Unit, modifier: Modifier = Modifier, actions: @Composable () -> Unit = {}) {
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        BackPill(onBack)
-        Spacer(Modifier.weight(1f))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { actions() }
-    }
 }
 
 @Composable
