@@ -1,0 +1,14 @@
+{
+  "name": "today-readme-assets",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "screens": "python capture_screens.py",
+    "compose": "node compose.mjs",
+    "demo": "python record_demo.py",
+    "all": "python capture_screens.py --keep && node compose.mjs && python record_demo.py"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.1"
+  }
+}
