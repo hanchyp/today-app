@@ -1,85 +1,179 @@
-# Today — Android Personal Dashboard
+<div align="center">
 
-Aplikasi Android offline untuk satu pengguna: jadwal, latihan, lamaran kerja, keuangan, dan tugas dalam satu layar **Today**.
-Desain acuan: `../Today-Android-Mascot-Polished.figcraft`. Rencana & log pengerjaan: [`docs/SPRINTS.md`](docs/SPRINTS.md).
+<img src="docs/images/banner.png" alt="Today: One screen. Whole day." width="100%">
 
-## Build
+# Today
 
-Tanpa Android Studio. Yang dibutuhkan:
+### One screen. Whole day.
 
-| Komponen | Lokasi di mesin ini |
+An offline Android app that puts one person's workouts, job applications, money and tasks on a single *Today* screen.
+
+![Kotlin 2.0](https://img.shields.io/badge/Kotlin_2.0-7F52FF?style=flat-square&logo=kotlin&logoColor=white)
+![Jetpack Compose](https://img.shields.io/badge/Jetpack_Compose-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white)
+![Material 3](https://img.shields.io/badge/Material_3-757575?style=flat-square&logo=materialdesign&logoColor=white)
+![Room 2.6](https://img.shields.io/badge/Room_2.6-3DDC84?style=flat-square&logo=sqlite&logoColor=white)
+![Android 8.0+](https://img.shields.io/badge/Android_8.0+-3DDC84?style=flat-square&logo=android&logoColor=white)
+![Gradle 8.10](https://img.shields.io/badge/Gradle_8.10-02303A?style=flat-square&logo=gradle&logoColor=white)
+
+[See the demo](#-demo) · [Key features](#-key-features) · [Run it locally](#-running-locally) · [Setup guide](docs/SETUP.md)
+
+</div>
+
+> [!TIP]
+> **Pick *Data contoh* on the last onboarding step** to start with a full set of sample routines, job applications, budgets and tasks. You can edit or delete all of it later.
+
+> [!NOTE]
+> **The app UI is in Indonesian** and amounts are in rupiah. It is a personal project for one user: there is **no account, no server and no sync**.
+
+---
+
+## 🧩 Problem
+
+A student who trains, hunts for internships and lives on a weekly budget ends up with one app per part of the day.
+
+- **Scattered**: the gym log, the job tracker, the expense app and the to-do list each hold a piece of the same day;
+- **Missed dates**: a coding test, a bill or a thesis deadline sits in the one app you did not open;
+- **Accounts**: most of these apps want a sign-up and send personal data to a server.
+
+## 💡 Solution
+
+Today keeps the four parts in one app and shows **what matters right now on one screen**. Every module writes into a shared agenda, so the *Today* screen and the calendar always show workouts, interviews, bills and task deadlines together. Everything is stored **only on the phone**, and a JSON backup file is the way to move it.
+
+<div align="center">
+
+| 📝 **Record** | 📅 **See it together** | 🔔 **Get reminded** |
+|:---:|:---:|:---:|
+| Log a set, a job application, an expense or a task in its own module. | The *Today* screen and the calendar merge every dated item into one agenda. | Alarms fire for interviews, bills, workouts and rest timers, even after a reboot. |
+
+</div>
+
+## 🎬 Demo
+
+<div align="center">
+<img src="docs/images/demo.gif" alt="Logging an expense: the Today screen, tapping Tambah, choosing Transaksi, typing Rp25.000 on the keypad, picking the Makan wallet, typing the note Kopi susu, saving, then the new row on the Keuangan screen" width="320">
+
+<sub>Logging an expense from the <i>Today</i> screen in about 9 seconds: amount, wallet, note, save.</sub>
+</div>
+
+## ✨ Key features
+
+### ☀️ Today screen and calendar
+
+The *Today* screen shows the next thing to do as a large focus card (for example *Push Day* at 17.00), followed by the rest of today's agenda and the total balance of your wallets. One *Tambah* button adds a task, event, transaction or job application from anywhere. The calendar shows a month grid with colored dots per module and the full agenda for the selected day.
+
+<img src="docs/images/today.png" alt="Two phone screens: the Today screen with a yellow Push Day focus card and a coding test under Berikutnya, and the November calendar with colored dots and two agenda cards for the 17th" width="100%">
+
+### 🏋️ Workout tracker
+
+- **Routines**: plan *Push*, *Pull* and *Leg* days with a weekly schedule and see sessions and minutes for the week.
+- **Session log**: tap a set to change the weight in **2.5 kg steps** and the reps, then tick it off. Volume and duration update live.
+- **Rest timer**: ticking a set starts a **90-second** rest countdown with *Lewati* (skip) and a notification that can add 30 seconds.
+- **Exercise catalog**: **1,324 exercises** with an animated demo for each, bundled in the app so it works offline.
+- **Personal records** are detected when you lift more than your previous best for an exercise.
+
+<img src="docs/images/workout.png" alt="Three phone screens: the Latihan tab with a green Push Day card and three routines, a dark workout session with a 1:25 rest timer and a 40 kg set ticked off, and the animated Bench press demo dialog" width="100%">
+
+### 💼 Job application tracker
+
+Each application moves through clear stages, and the next coding test or interview is shown on the card and on the *Today* screen. Interview reminders default to **30 minutes before** and can be changed per event.
+
+| Stage | Meaning |
 |---|---|
-| JDK 17 | `C:\Program Files\Microsoft\jdk-17.0.12.7-hotspot` |
-| Android SDK (API 35) | `F:\Sdk` (`local.properties` → `sdk.dir`) |
-| Cache Gradle | `D:\Android\gradle-home` (env `GRADLE_USER_HOME`) |
+| ⚪ *Tersimpan* | Saved, not applied yet (can have an application deadline) |
+| 🔵 *Sudah apply* | Application sent |
+| 🟡 *Coding test* | Coding test scheduled |
+| 🟠 *Interview* | Interview scheduled |
+| 🟢 *Offer* | Offer received |
+| 🔴 *Ditolak* / *Dibatalkan* | Rejected or withdrawn |
+
+<img src="docs/images/career.png" alt="Two phone screens: the Karier list with three applications filtered by stage, and the Awan Biru Labs detail page with a stage tracker, the upcoming coding test and notes" width="100%">
+
+### 💸 Money and bills
+
+- **Weekly wallets**: split your balance into wallets such as *Makan* and pay each expense from one of them.
+- **Quick entry**: a number keypad, a category chip and an optional note. Saving takes three taps.
+- **Budgets and bills**: weekly or monthly budgets per category, and recurring bills with a reminder **1 day before** by default. Paying a bill records the expense and moves the due date forward.
+- **Monthly summary**: income, expenses and the share of each category.
+
+<img src="docs/images/finance.png" alt="Two phone screens: the Keuangan tab with a Rp1.500.000 balance, a Makan wallet and recent transactions, and the Catat transaksi sheet with a keypad showing Rp45.000" width="100%">
+
+### ✅ Tasks and projects
+
+Group tasks into projects with a progress bar, set a due date and priority, and see the next three open tasks at the top. Tasks with a due date show up on the *Today* screen and in the calendar.
+
+<details>
+<summary><b>See a screenshot of tasks and projects</b></summary>
+<br>
+<img src="docs/images/tasks.png" alt="Two phone screens: the Tugas tab with the Skripsi project card and three upcoming tasks with due-date chips, and the Skripsi project page listing its tasks" width="100%">
+</details>
+
+### 🔔 Reminders, backup and privacy
+
+Reminders use exact alarms and are **rescheduled after a reboot**. An optional morning summary at **06.30** lists the day's agenda and the remaining budget. All data stays in a local database: **nothing is sent to a server**. *Backup ke file* saves everything to one JSON file through the Android file picker, and *Pulihkan dari backup* replaces all data in a single transaction, so a failed restore changes nothing.
+
+<details>
+<summary><b>See a screenshot of the settings</b></summary>
+<br>
+<img src="docs/images/settings.png" alt="Two phone screens of Pengaturan: profile name, module switches and notification options, and the Data section with Backup ke file, Pulihkan dari backup and the weekly backup reminder" width="100%">
+</details>
+
+### 📱 Built for one hand
+
+Today is a phone app first: a bottom bar with the five modules, large touch targets, a yellow action button within thumb reach, and bottom sheets for quick entry. Modules you do not use can be hidden in settings. Icon buttons have **TalkBack labels**, and long text wraps instead of being cut off at large font sizes.
+
+<img src="docs/images/mobile.png" alt="Three phone screens side by side: the Today screen, the Latihan tab and the Keuangan tab" width="100%">
+
+## 🧰 Tech stack
+
+| Layer | Technology |
+|---|---|
+| Language | **Kotlin 2.0** (KSP, coroutines and Flow) |
+| UI | **Jetpack Compose** with **Material 3** (Compose BOM 2024.09, Navigation Compose 2.8, Inter font) |
+| Data | **Room 2.6** on SQLite (exported schema, tested migrations), **DataStore** for preferences |
+| Background | **AlarmManager** for exact reminders, **WorkManager 2.9** for the daily summary and backup reminder |
+| Backup | **JSON file** through the Storage Access Framework |
+| Tests | **JUnit 4**, **Robolectric 4.13**, Turbine, room-testing (79 JVM tests) |
+| Build | **Gradle 8.10**, Android Gradle Plugin 8.7, min SDK 26 (Android 8.0), target SDK 35 |
+
+## 🚀 Running locally
 
 ```bash
-./gradlew testDebugUnitTest     # semua tes JVM (Robolectric untuk Room)
-./gradlew assembleDebug         # app/build/outputs/apk/debug/app-debug.apk
-./gradlew assembleRelease       # app/build/outputs/apk/release/app-release.apk (R8, ±2,5 MB)
+git clone https://github.com/hanchyp/today-app.git
+cd today-app
+echo "sdk.dir=/path/to/Android/Sdk" > local.properties   # point Gradle at your Android SDK (API 35)
+./gradlew testDebugUnitTest                               # run the JVM tests
+./gradlew assembleDebug                                   # build app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Robolectric mengunduh runtime Android ke `D:\Android\robolectric-home` (diatur di `app/build.gradle.kts`).
+You need JDK 17 and the Android SDK with API 35. No environment variables or API keys are needed. Install the APK on a device or emulator; see the [setup guide](docs/SETUP.md) for release signing and installing on MIUI phones.
 
-### Build rilis & keystore
-
-- Keystore: `D:\Android\keystores\today-release.jks` (di luar repo).
-- Path & sandi: `keystore.properties` di root proyek (di-ignore git); salinannya ada di `D:\Android\keystores\today-release.keystore.properties`.
-- **Simpan cadangan keystore + file properties itu di tempat lain.** Tanpa keystore yang sama, versi rilis berikutnya tidak bisa dipasang di atas versi lama (harus uninstall, data di HP hilang kecuali sudah di-backup).
-- Tanpa `keystore.properties`, `assembleRelease` tetap jalan tetapi APK tidak ditandatangani.
-
-### Memasang di HP (Redmi / MIUI)
-
-MIUI memblokir `adb install` tanpa SIM, jadi salin APK ke HP lalu buka dari File Manager.
-
-APK debug dan rilis ditandatangani dengan kunci berbeda, sehingga **rilis tidak bisa dipasang di atas debug**. Untuk pindah:
-
-1. Di aplikasi debug: **Atur → Backup ke file**.
-2. Uninstall aplikasi debug.
-3. Pasang `app-release.apk`, selesaikan onboarding (pilih "Kosong").
-4. **Atur → Pulihkan dari backup** → pilih file tadi.
-
-## Struktur kode
+## 📁 Project structure
 
 ```
 app/src/main/java/com/farhan/today/
-├── TodayApplication.kt        # membuat AppContainer, channel notifikasi, worker
-├── di/AppContainer.kt         # DI manual: db, repository, scheduler, DataManager
-├── data/
-│   ├── db/                    # Room: Entities, Daos, Converters, TodayDatabase (skema v1), SeedData
-│   ├── repo/                  # Workout/Career/Finance/Task/AgendaRepository (aturan bisnis)
-│   ├── prefs/UserPrefs.kt     # DataStore: nama, modul aktif, pengaturan notifikasi
-│   └── backup/DataManager.kt  # ekspor/impor JSON, hapus semua data
-├── domain/                    # model, formatter (Rp, tanggal), WorkoutMath, use case Today
-├── reminder/                  # AlarmManager (ReminderScheduler), Boot/Alarm receiver, worker harian
-├── workout/RestTimer.kt       # timer istirahat + perencana sesi harian
-└── ui/
-    ├── theme/  components/    # token desain FigCraft, kartu, chip, form
-    ├── today/  calendar/  career/  workout/  finance/  tasks/  settings/
-    └── TodayApp.kt            # onboarding gate, NavHost, navigasi bawah
+├── data/            # Room database, repositories, DataStore prefs, JSON backup
+├── domain/          # models, formatters (rupiah, dates), workout math, Today use case
+├── reminder/        # alarm scheduling, boot receiver, daily workers
+├── workout/         # rest timer
+└── ui/              # Compose screens per module, theme and shared components
+app/src/main/assets/ # exercise catalog JSON and animated WebP demos
+app/src/test/        # JVM tests (repositories, DAO, migrations, reminders)
+app/schemas/         # exported Room schemas for migration tests
+docs/                # setup guide, sprint plan, UX audit, logo
+scripts/readme-assets/ # scripts that capture the README images
 ```
 
-Konvensi data (lihat `docs/SPRINTS.md` §0.4): ID UUID, `createdAt/updatedAt/deletedAt` (soft delete), uang `Long` rupiah utuh, tanggal `epochDay`. Skema diekspor ke `app/schemas/`; perubahan skema wajib lewat `Migration` + tes (`MigrationTest`).
+## 🛣️ Roadmap
 
-## Backup & restore
+- [ ] Run the device checklist from the UX audit on a real phone (font scale, TalkBack, keyboard in forms)
+- [ ] Show the rest timer end time on a Huawei Band through the phone notification
+- [ ] English UI strings next to Indonesian
+- [ ] Optional sync server, using the sync-ready schema (UUID ids, soft delete) already in place
 
-- **Atur → Backup ke file** menyimpan `today-backup-YYYYMMDD.json` lewat pemilih file Android (bisa ke Download, Google Drive, dsb.).
-- Isinya semua tabel + nama pengguna, beserta `schemaVersion`. File dari versi skema yang lebih baru ditolak.
-- **Pulihkan dari backup** menampilkan ringkasan isi file lalu meminta konfirmasi; data saat ini **diganti seluruhnya** dalam satu transaksi (gagal = tidak ada yang berubah). Pengingat masa depan dipasang ulang otomatis.
-- **Hapus semua data** meminta mengetik `HAPUS`; katalog gerakan dan kategori keuangan bawaan dibuat ulang.
-- Opsi pengingat backup mingguan ada di Pengaturan.
+---
 
-## Lisensi pihak ketiga
+<div align="center">
 
-Font Inter (SIL Open Font License 1.1) di `res/font/inter_variable.ttf`.
+Built with ❤️ by [@hanchyp](https://github.com/hanchyp)
 
-Katalog gerakan dari [hasaneyldrm/exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset):
-- `assets/exercise-catalog.json`: 1.324 gerakan (data MIT, lihat `assets/exercise-catalog-license.txt`).
-- `assets/exercise-media/videos/*.webp`: animasi gerakan 180×180, dikonversi dari GIF asli ke **WebP animasi** (lossy q70, method 6) supaya ±3× lebih kecil. JPG thumbnail tidak dipakai; frame pertama WebP berfungsi sebagai gambar diam (Android 8.x hanya menampilkan frame itu). Media © Gym visual — https://gymvisual.com/ (lihat `assets/exercise-media-notice.md`); atribusi tampil di dialog gerakan.
-- Di JSON, kolom `animation` berisi `videos/<id>-<media>.webp`.
-- Untuk memperbarui: unduh repo, konversi `videos/*.gif` ke `.webp` (Pillow: `save_all=True, quality=70, method=6`), salin ke `assets/exercise-media/videos/`, lalu ganti `gif` → `animation` dengan ekstensi `.webp` di JSON.
-
-## Identitas visual
-
-- Logo "Matahari" (`docs/today-logo.svg`, ikon launcher di `res/drawable/ic_launcher_foreground.xml` + versi monokrom). Konsep lain ada di `docs/logo-concepts/`.
-- Palet (`ui/theme/Theme.kt`): dasar putih hangat `#FDFCF8`, kuning `#FFD23F` untuk kartu fokus/FAB (teks navy), navy `#1A1A2E` untuk aksi utama & teks, coral `#FF5A36` sebagai aksen. Token warna merek bernama `Brand*` (dulu `Violet*`).
+</div>
