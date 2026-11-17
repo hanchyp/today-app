@@ -1,5 +1,27 @@
 package com.farhan.today.ui.finance
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.ImeAction
+import com.farhan.today.ui.components.DetailScaffold
+import com.farhan.today.ui.components.LoadingSkeleton
+import com.farhan.today.ui.components.ScreenColumn
+import com.farhan.today.ui.components.SearchField
+import com.farhan.today.ui.components.TodayFab
+import com.farhan.today.ui.components.TopBarAction
+import com.farhan.today.ui.components.fabExpanded
+import com.farhan.today.ui.theme.Spacing
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,7 +43,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -81,7 +102,6 @@ import com.farhan.today.domain.relativeDay
 import com.farhan.today.ui.components.ChoiceChips
 import com.farhan.today.ui.components.ConfirmDialog
 import com.farhan.today.ui.components.DateField
-import com.farhan.today.ui.components.DetailTopBar
 import com.farhan.today.ui.components.EmptyState
 import com.farhan.today.ui.components.FieldLabel
 import com.farhan.today.ui.components.HeroCard
@@ -112,28 +132,25 @@ private fun financeVm(): FinanceViewModel {
     return viewModel(factory = vmFactory { FinanceViewModel(c.financeRepository, c.clock) })
 }
 
-@Composable
-private fun ScrollColumn(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .statusBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        content = content,
-    )
+/** Ikon vektor kategori (emoji tampil beda di tiap merek HP dan tidak ikut warna tema). */
+fun categoryIcon(icon: String?): Int = when (icon) {
+    "food" -> R.drawable.ic_cat_food; "train" -> R.drawable.ic_cat_train; "home" -> R.drawable.ic_cat_home
+    "school" -> R.drawable.ic_cat_school; "fun" -> R.drawable.ic_cat_fun; "health" -> R.drawable.ic_cat_health
+    "wallet" -> R.drawable.ic_cat_wallet; "trend" -> R.drawable.ic_cat_trend; "bill" -> R.drawable.ic_cat_bill
+    else -> R.drawable.ic_cat_other
 }
 
-fun categoryEmoji(icon: String?): String = when (icon) {
-    "food" -> "🍜"; "train" -> "🚆"; "home" -> "🏠"; "school" -> "🎓"; "fun" -> "🎮"
-    "health" -> "💪"; "wallet" -> "💰"; "trend" -> "📈"; "bill" -> "🧾"; else -> "•"
+@Composable
+private fun CategoryBadge(icon: Int, background: Color) {
+    Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(background), contentAlignment = Alignment.Center) {
+        Icon(painterResource(icon), null, Modifier.size(20.dp), tint = TodayColors.Ink)
+    }
 }
 
 @Composable
 private fun LinkText(text: String, onClick: () -> Unit) {
     Text(
-        text, Modifier.clip(TodayShapes.Chip).clickable(role = Role.Button, onClick = onClick).padding(8.dp),
+        text, Modifier.heightIn(min = 48.dp).clip(TodayShapes.Chip).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 8.dp, vertical = 14.dp),
         style = TodayType.Label, color = TodayColors.Brand,
     )
 }
@@ -157,10 +174,7 @@ private fun TransactionLine(row: TransactionRow, zone: ZoneId, today: LocalDate,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(if (income) TodayColors.WorkoutTint else TodayColors.FinanceTrack),
-            contentAlignment = Alignment.Center,
-        ) { Text(categoryEmoji(row.categoryIcon), fontSize = 18.sp) }
+        CategoryBadge(categoryIcon(row.categoryIcon), if (income) TodayColors.WorkoutTint else TodayColors.FinanceTrack)
         Column(Modifier.weight(1f)) {
             Text(tx.note.ifBlank { row.categoryName ?: "Transaksi" }, style = TodayType.Label.copy(fontSize = 15.sp), color = TodayColors.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
@@ -169,7 +183,7 @@ private fun TransactionLine(row: TransactionRow, zone: ZoneId, today: LocalDate,
             )
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(formatSignedRupiah(tx.amount, income), style = TodayType.Label.copy(fontSize = 15.sp), color = if (income) TodayColors.Income else TodayColors.Ink, maxLines = 1)
+            Text(formatSignedRupiah(tx.amount, income), style = TodayType.Label.copy(fontSize = 15.sp, fontFeatureSettings = "tnum"), color = if (income) TodayColors.Income else TodayColors.Ink, maxLines = 1)
             Text(if (income) "Masuk" else "Keluar", style = TodayType.Tiny, color = if (income) TodayColors.Income else TodayColors.Muted)
         }
     }
@@ -203,11 +217,10 @@ fun FinanceRoute(openAdd: Boolean, onNavigate: (String) -> Unit, onCloseAdd: (()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    val scroll = rememberScrollState()
     Box(Modifier.fillMaxSize()) {
-        ScrollColumn {
-            ScreenHeader("Finance tracker", "Keuangan", "Pantau pengeluaran dan tagihan.") {
-                Pill("+ Catat", selected = true, onClick = { sheet = NEW })
-            }
+        ScreenColumn(state = scroll, bottomPadding = Spacing.FabClearance) {
+            ScreenHeader("Finance tracker", "Keuangan", "Pantau pengeluaran dan tagihan.")
 
             WalletPanel(vm, onManage = { onNavigate(FinanceRoutes.BUDGETS) })
             SectionRow("Transaksi terbaru", "Lihat semua") { onNavigate(FinanceRoutes.TRANSACTIONS) }
@@ -234,12 +247,12 @@ fun FinanceRoute(openAdd: Boolean, onNavigate: (String) -> Unit, onCloseAdd: (()
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MiniStat("Masuk", "+" + formatRupiahCompact(s.income), TodayColors.Income, Modifier.weight(1f))
                     MiniStat("Keluar", "−" + formatRupiahCompact(s.expense), TodayColors.Ink, Modifier.weight(1f))
-                    MiniStat("Selisih", (if (s.net >= 0) "+" else "") + formatRupiahCompact(s.net), if (s.net >= 0) TodayColors.Income else TodayColors.Danger, Modifier.weight(1f))
                 }
+                MiniStat("Selisih", (if (s.net >= 0) "+" else "") + formatRupiahCompact(s.net), if (s.net >= 0) TodayColors.Income else TodayColors.Danger, Modifier.fillMaxWidth())
             }
             LinkText("Kelola kategori") { onNavigate(FinanceRoutes.CATEGORIES) }
-            Spacer(Modifier.height(64.dp))
         }
+        TodayFab("Catat", scroll.fabExpanded, Modifier.align(Alignment.BottomEnd)) { sheet = NEW }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(16.dp))
     }
 
@@ -271,7 +284,7 @@ private const val NEW = "new"
 private fun MiniStat(label: String, value: String, color: Color, modifier: Modifier) {
     Column(modifier.clip(TodayShapes.Card).background(TodayColors.Surface).border(BorderStroke(1.dp, TodayColors.NavStroke), TodayShapes.Card).padding(12.dp)) {
         Text(label.uppercase(), style = TodayType.Tiny, color = TodayColors.Muted)
-        Text(value, style = TodayType.Label.copy(fontSize = 15.sp), color = color, maxLines = 1)
+        Text(value, style = TodayType.Label.copy(fontSize = 15.sp, fontFeatureSettings = "tnum"), color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -288,17 +301,21 @@ private fun BillCard(b: BillEntity, today: LocalDate, onEdit: () -> Unit, onPay:
     val urgent = b.active && days <= 1
     ListCard(onClick = onEdit) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(TodayColors.Career), contentAlignment = Alignment.Center) { Text("🧾", fontSize = 18.sp) }
+            CategoryBadge(R.drawable.ic_cat_bill, TodayColors.Career)
             Column(Modifier.weight(1f)) {
                 Text(b.name, style = TodayType.Label.copy(fontSize = 15.sp), color = TodayColors.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(
-                    (if (urgent) "! " else "") + whenText + if (b.repeat != BillRepeat.NONE) " · ${if (b.repeat == BillRepeat.MONTHLY) "bulanan" else "tahunan"}" else "",
-                    style = TodayType.Meta, color = if (urgent) TodayColors.Danger else TodayColors.Muted,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (urgent) Icon(painterResource(R.drawable.ic_warning), null, Modifier.size(14.dp), tint = TodayColors.Danger)
+                    Text(
+                        whenText + if (b.repeat != BillRepeat.NONE) " · ${if (b.repeat == BillRepeat.MONTHLY) "bulanan" else "tahunan"}" else "",
+                        style = TodayType.Meta, color = if (urgent) TodayColors.Danger else TodayColors.Muted,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(formatRupiah(b.amount), style = TodayType.Label.copy(fontSize = 15.sp), color = TodayColors.Ink)
-                if (b.active) Pill("Lunas", background = TodayColors.WorkoutTint, onClick = onPay)
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(formatRupiah(b.amount), style = TodayType.Label.copy(fontSize = 15.sp, fontFeatureSettings = "tnum"), color = TodayColors.Ink)
+                if (b.active) Pill("Bayar", background = TodayColors.WorkoutTint, onClick = onPay)
             }
         }
     }
@@ -340,19 +357,41 @@ fun TransactionSheet(
     val ofKind = categories.filter { it.kind == kind }
     LaunchedEffect(kind, ofKind.size) { if (categoryId == null || ofKind.none { it.id == categoryId }) categoryId = ofKind.firstOrNull()?.id }
 
+    val amount = digits.toLongOrNull() ?: 0
+    fun submit() {
+        if (amount > 0 && !saving) {
+            val at = date?.let { LocalDateTime.of(it, time ?: LocalTime.now().withSecond(0).withNano(0)) }
+            saving = true
+            vm.saveTransaction(TransactionInput(kind, amount, categoryId, note, at, walletId), transactionId) { message ->
+                saving = false
+                error = message
+                if (message == null) onDismiss()
+            }
+        }
+    }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = TodayColors.Background) {
-        if (!loaded) return@ModalBottomSheet
+        if (!loaded) {
+            LoadingSkeleton(Modifier.padding(horizontal = Spacing.ScreenH).navigationBarsPadding(), rows = 2, showHeader = false)
+            return@ModalBottomSheet
+        }
+      Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).navigationBarsPadding().padding(bottom = 16.dp),
+            Modifier.weight(1f, fill = false).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Spacing.ScreenH),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(if (transactionId == null) "Catat transaksi" else "Ubah transaksi", style = TodayType.Section, color = TodayColors.Ink)
             ChoiceChips(listOf(MoneyKind.EXPENSE to "− Keluar", MoneyKind.INCOME to "+ Masuk"), kind, { kind = it })
-            val amount = digits.toLongOrNull() ?: 0
+            val shown = (if (kind == MoneyKind.INCOME) "+" else "−") + formatRupiah(amount)
+            // Nominal panjang mengecil, bukan terpotong.
+            val amountSize = when {
+                shown.length <= 12 -> 40.sp
+                shown.length <= 16 -> 32.sp
+                else -> 26.sp
+            }
             Text(
-                (if (kind == MoneyKind.INCOME) "+" else "−") + formatRupiah(amount),
+                shown,
                 Modifier.fillMaxWidth().semantics { contentDescription = "Nominal ${formatRupiah(amount)}" },
-                style = TodayType.Display.copy(fontSize = 40.sp), textAlign = TextAlign.End,
+                style = TodayType.Display.copy(fontSize = amountSize, lineHeight = 46.sp, fontFeatureSettings = "tnum"), textAlign = TextAlign.End,
                 color = if (kind == MoneyKind.INCOME) TodayColors.Income else TodayColors.Ink, maxLines = 1,
             )
             Keypad(
@@ -361,31 +400,20 @@ fun TransactionSheet(
             )
             if (kind == MoneyKind.EXPENSE) {
                 FieldLabel("Bayar dari dompet")
-                if (wallets.isEmpty()) Text("Buat dan isi dompet di Keuangan → Dompet mingguan.")
+                if (wallets.isEmpty()) Text("Buat dan isi dompet di Keuangan → Dompet mingguan.", style = TodayType.Meta, color = TodayColors.Muted)
                 ChoiceChips(wallets.map { it.id as String? to (it.name + " · " + formatRupiah(it.balance)) }, walletId, { walletId = it })
             }
             FieldLabel("Kategori")
             LinkText("+ Kategori baru") { newCategory = true }
-            ChoiceChips(ofKind.map { it.id as String? to "${categoryEmoji(it.iconKey)} ${it.name}" }, categoryId, { categoryId = it })
-            TodayTextField(note, { note = it }, "Catatan (opsional)", placeholder = if (kind == MoneyKind.EXPENSE) "Makan siang" else "Uang saku")
+            ChoiceChips(ofKind.map { it.id as String? to it.name }, categoryId, { categoryId = it }, icon = { id -> categoryIcon(ofKind.firstOrNull { it.id == id }?.iconKey) })
+            TodayTextField(note, { note = it }, "Catatan (opsional)", placeholder = if (kind == MoneyKind.EXPENSE) "Makan siang" else "Uang saku", imeAction = ImeAction.Done)
             if (transactionId != null || date != null) {
                 FieldLabel("Tanggal")
                 DateField(date, { date = it })
             } else {
                 LinkText("Ubah tanggal (default: sekarang)") { date = LocalDate.now() }
             }
-            error?.let { Text(it, color = TodayColors.Danger) }
-            PrimaryButton(if (amount > 0) "Simpan ${formatRupiah(amount)}" else "Masukkan nominal") {
-                if (amount > 0 && !saving) {
-                    val at = date?.let { LocalDateTime.of(it, time ?: LocalTime.now().withSecond(0).withNano(0)) }
-                    saving = true
-                    vm.saveTransaction(TransactionInput(kind, amount, categoryId, note, at, walletId), transactionId) { message ->
-                        saving = false
-                        error = message
-                        if (message == null) onDismiss()
-                    }
-                }
-            }
+            error?.let { Text(it, style = TodayType.Meta, color = TodayColors.Danger) }
             if (transactionId != null) {
                 TextButton(onClick = {
                     vm.deleteTransaction(transactionId) { message ->
@@ -396,7 +424,15 @@ fun TransactionSheet(
                     Text("Hapus transaksi", color = TodayColors.Danger, style = TodayType.Label)
                 }
             }
+            Spacer(Modifier.height(4.dp))
         }
+        Column(Modifier.fillMaxWidth().padding(horizontal = Spacing.ScreenH, vertical = 12.dp)) {
+            PrimaryButton(
+                if (amount > 0) "Simpan ${formatRupiah(amount)}" else "Masukkan nominal",
+                enabled = amount > 0, loading = saving, onClick = ::submit,
+            )
+        }
+      }
     }
     if (newCategory) WalletInputDialog("Kategori baru", "Nama kategori", onDismiss = { newCategory = false }) { name, done ->
         vm.saveCategory(name, kind)
@@ -406,28 +442,33 @@ fun TransactionSheet(
 
 @Composable
 private fun Keypad(onDigit: (String) -> Unit, onBackspace: () -> Unit) {
-    val keys = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "000", "0", "⌫")
+    val keys = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "000", "0", BACKSPACE)
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         keys.chunked(3).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { k ->
                     Box(
                         Modifier.weight(1f).height(52.dp).clip(TodayShapes.Button)
-                            .background(if (k == "⌫") TodayColors.Chip else TodayColors.Surface)
+                            .background(if (k == BACKSPACE) TodayColors.Chip else TodayColors.Surface)
                             .border(BorderStroke(1.dp, TodayColors.NavStroke), TodayShapes.Button)
-                            .clickable(role = Role.Button) { if (k == "⌫") onBackspace() else onDigit(k) }
-                            .semantics { contentDescription = if (k == "⌫") "Hapus angka" else k },
+                            .clickable(role = Role.Button) { if (k == BACKSPACE) onBackspace() else onDigit(k) }
+                            .semantics { contentDescription = if (k == BACKSPACE) "Hapus angka" else k },
                         contentAlignment = Alignment.Center,
-                    ) { Text(k, style = TodayType.CardTitle, color = TodayColors.Ink) }
+                    ) {
+                        if (k == BACKSPACE) Icon(painterResource(R.drawable.ic_backspace), null, tint = TodayColors.Ink)
+                        else Text(k, style = TodayType.CardTitle.copy(fontFeatureSettings = "tnum"), color = TodayColors.Ink)
+                    }
                 }
             }
         }
     }
 }
 
+private const val BACKSPACE = "back"
+
 // ================================================================== Semua transaksi
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun TransactionsRoute(onBack: () -> Unit) {
     val vm = financeVm()
@@ -447,35 +488,45 @@ fun TransactionsRoute(onBack: () -> Unit) {
                     }
     }
 
+    DetailScaffold(
+        title = "Semua transaksi",
+        onBack = onBack,
+        scrollable = false,
+        actions = { TopBarAction(R.drawable.ic_add, "Catat transaksi") { sheet = NEW } },
+    ) {
     Box(Modifier.fillMaxSize()) {
         // LazyColumn + key per transaksi: daftar bisa panjang (ratusan baris per bulan).
         LazyColumn(
-            Modifier.fillMaxSize().statusBarsPadding(),
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = Spacing.ScreenH, end = Spacing.ScreenH, top = 4.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item(key = "header") {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    DetailTopBar(onBack) { Pill("+ Catat", selected = true, onClick = { sheet = NEW }) }
-                    Text("SEMUA TRANSAKSI", style = TodayType.Eyebrow, color = TodayColors.Brand)
-                    MonthSwitcher(formatMonthYear(state.month.atDay(1)), { vm.shiftMonth(-1) }, { vm.shiftMonth(1) })
+                    MonthSwitcher(state.month, { vm.shiftMonth(-1) }, { vm.shiftMonth(1) })
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         MiniStat("Masuk", "+" + formatRupiahCompact(state.income), TodayColors.Income, Modifier.weight(1f))
                         MiniStat("Keluar", "−" + formatRupiahCompact(state.expense), TodayColors.Ink, Modifier.weight(1f))
                     }
-                    TodayTextField(state.query, vm::setQuery, "Cari catatan atau kategori", capitalization = KeyboardCapitalization.None)
+                    SearchField(state.query, vm::setQuery, "Cari catatan atau kategori")
                     ChoiceChips(KindFilter.entries.map { it to it.label }, state.kind, vm::setKind)
                     ChoiceChips(listOf<Pair<String?, String>>(null to "Semua kategori") + categories.map { it.id to it.name }, state.categoryId, vm::setCategory)
-                    if (state.groups.isEmpty() && !state.loading) {
+                    if (state.loading) LoadingSkeleton(rows = 3, showHeader = false)
+                    else if (state.groups.isEmpty()) {
                         EmptyState("Tidak ada transaksi", "Belum ada catatan yang cocok di bulan ini.", mascot = R.drawable.mascot_coin)
+                    } else {
+                        Text("Geser transaksi ke kiri untuk menghapus.", style = TodayType.Meta, color = TodayColors.Muted)
                     }
                 }
             }
             state.groups.forEach { g ->
-                item(key = "day-${g.date}") {
-                    Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                stickyHeader(key = "day-${g.date}") {
+                    Row(
+                        Modifier.fillMaxWidth().background(TodayColors.Background).padding(top = 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(relativeDay(g.date, today).let { if (it.length <= 8) "$it · ${formatLongDate(g.date)}" else formatLongDate(g.date) }, Modifier.weight(1f), style = TodayType.Label, color = TodayColors.Ink)
-                        Text((if (g.net >= 0) "+" else "") + formatRupiah(g.net), style = TodayType.Label, color = if (g.net >= 0) TodayColors.Income else TodayColors.Muted)
+                        Text((if (g.net >= 0) "+" else "") + formatRupiah(g.net), style = TodayType.Label.copy(fontFeatureSettings = "tnum"), color = if (g.net >= 0) TodayColors.Income else TodayColors.Muted)
                     }
                 }
                 items(g.rows, key = { it.tx.id }) { r ->
@@ -490,9 +541,13 @@ fun TransactionsRoute(onBack: () -> Unit) {
                     })
                     SwipeToDismissBox(
                         state = swipe, enableDismissFromStartToEnd = false,
-                        modifier = Modifier.clip(TodayShapes.Card),
+                        modifier = Modifier.animateItem().clip(TodayShapes.Card),
                         backgroundContent = {
-                            Box(Modifier.fillMaxSize().background(Color(0xFFFFE0DD)).padding(horizontal = 20.dp), contentAlignment = Alignment.CenterEnd) {
+                            Row(
+                                Modifier.fillMaxSize().background(Color(0xFFFFE0DD)).padding(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(painterResource(R.drawable.ic_delete), null, Modifier.size(18.dp), tint = TodayColors.Danger)
                                 Text("Hapus", style = TodayType.Label, color = TodayColors.Danger)
                             }
                         },
@@ -503,11 +558,9 @@ fun TransactionsRoute(onBack: () -> Unit) {
                     }
                 }
             }
-            item(key = "footer") {
-                Text("Geser transaksi ke kiri untuk menghapus.", style = TodayType.Meta, color = TodayColors.Muted, modifier = Modifier.padding(bottom = 64.dp))
-            }
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(16.dp))
+    }
     }
     sheet?.let { target ->
         TransactionSheet(vm, categories, target.takeIf { it != NEW }, onDismiss = { sheet = null }, onDeleted = { sheet = null; deleted(it) })
@@ -515,11 +568,22 @@ fun TransactionsRoute(onBack: () -> Unit) {
 }
 
 @Composable
-private fun MonthSwitcher(label: String, onPrev: () -> Unit, onNext: () -> Unit) {
+private fun MonthSwitcher(month: java.time.YearMonth, onPrev: () -> Unit, onNext: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(label, Modifier.weight(1f), style = TodayType.Display.copy(fontSize = 28.sp), color = TodayColors.Headline)
-        Pill("‹", onClick = onPrev)
-        Pill("›", onClick = onNext)
+        AnimatedContent(
+            targetState = month,
+            transitionSpec = {
+                val forward = targetState > initialState
+                (slideInHorizontally(tween(240)) { w -> (if (forward) 1 else -1) * w / 5 } + fadeIn(tween(200, delayMillis = 40))) togetherWith
+                    (slideOutHorizontally(tween(240)) { w -> (if (forward) -1 else 1) * w / 5 } + fadeOut(tween(90)))
+            },
+            modifier = Modifier.weight(1f),
+            label = "month",
+        ) { m ->
+            Text(formatMonthYear(m.atDay(1)), style = TodayType.Section, color = TodayColors.Headline)
+        }
+        Pill("", icon = R.drawable.ic_chevron_left, modifier = Modifier.semantics { contentDescription = "Bulan sebelumnya" }, onClick = onPrev)
+        Pill("", icon = R.drawable.ic_chevron_right, modifier = Modifier.semantics { contentDescription = "Bulan berikutnya" }, onClick = onNext)
     }
 }
 
@@ -528,8 +592,7 @@ private fun MonthSwitcher(label: String, onPrev: () -> Unit, onNext: () -> Unit)
 @Composable
 fun BudgetsRoute(onBack: () -> Unit) {
     val vm = financeVm()
-    ScrollColumn {
-        DetailTopBar(onBack)
+    DetailScaffold(title = "Dompet", onBack = onBack) {
         WalletPanel(vm)
     }
 }
@@ -550,11 +613,12 @@ fun BillsRoute(onBack: () -> Unit, billId: String? = null) {
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var expanded by rememberSaveable { mutableStateOf<String?>(null) }
 
-    ScrollColumn {
-        DetailTopBar(onBack) { Pill("+ Tagihan", selected = true, onClick = { editing = NEW }) }
-        Text("TAGIHAN", style = TodayType.Eyebrow, color = TodayColors.Brand)
-        Text("Tagihan", style = TodayType.Display, color = TodayColors.Headline)
-        Text("Tandai lunas untuk mencatat pengeluaran dan memajukan jatuh tempo.", style = TodayType.Body, color = TodayColors.Muted)
+    DetailScaffold(
+        title = "Tagihan",
+        onBack = onBack,
+        actions = { TopBarAction(R.drawable.ic_add, "Tagihan baru") { editing = NEW } },
+    ) {
+        Text("Ketuk “Bayar” untuk mencatat pengeluaran dan memajukan jatuh tempo.", style = TodayType.Body, color = TodayColors.Muted)
         val visibleBills = if (billId == null) bills else bills.filter { it.id == billId }
         if (visibleBills.isEmpty()) {
             if (billId == null) EmptyState("Belum ada tagihan", "Tambahkan tagihan rutin seperti gym, kos, atau langganan.", mascot = R.drawable.mascot_coin)
@@ -564,13 +628,25 @@ fun BillsRoute(onBack: () -> Unit, billId: String? = null) {
             BillCard(b, today, onEdit = { editing = b.id }) { paying = b }
             val history = payments.filter { it.billId == b.id }
             if (history.isNotEmpty()) {
-                LinkText(if (expanded == b.id) "Sembunyikan riwayat ▴" else "Riwayat pembayaran (${history.size}) ▾") { expanded = if (expanded == b.id) null else b.id }
-                if (expanded == b.id) history.forEach { p ->
-                    Text(
-                        "• Jatuh tempo ${formatLongDate(p.dueDate)} — dibayar ${relativeDay(Instant.ofEpochMilli(p.paidAt).atZone(c.clock.zone).toLocalDate(), today).lowercase()} · ${formatRupiah(p.amount)}",
-                        style = TodayType.Meta, color = TodayColors.Muted, modifier = Modifier.padding(start = 12.dp),
-                    )
-                    TextButton(onClick = { deletingPayment = p.id }) { Text("Hapus riwayat", color = TodayColors.Danger) }
+                Pill(
+                    if (expanded == b.id) "Sembunyikan riwayat" else "Riwayat pembayaran (${history.size})",
+                    background = TodayColors.Background, contentColor = TodayColors.Brand,
+                    trailingIcon = if (expanded == b.id) R.drawable.ic_expand_less else R.drawable.ic_expand_more,
+                ) { expanded = if (expanded == b.id) null else b.id }
+                AnimatedVisibility(expanded == b.id) {
+                    Column {
+                        history.forEach { p ->
+                            Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "Jatuh tempo ${formatLongDate(p.dueDate)} · dibayar ${relativeDay(Instant.ofEpochMilli(p.paidAt).atZone(c.clock.zone).toLocalDate(), today).lowercase()} · ${formatRupiah(p.amount)}",
+                                    style = TodayType.Meta, color = TodayColors.Muted, modifier = Modifier.weight(1f),
+                                )
+                                IconButton(onClick = { deletingPayment = p.id }) {
+                                    Icon(painterResource(R.drawable.ic_delete), "Hapus riwayat pembayaran", tint = TodayColors.Muted)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -599,7 +675,7 @@ private fun BillSheet(vm: FinanceViewModel, categories: List<CategoryEntity>, bi
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = TodayColors.Background) {
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).navigationBarsPadding().padding(bottom = 16.dp),
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Spacing.ScreenH).navigationBarsPadding().imePadding().padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(if (bill == null) "Tagihan baru" else "Ubah tagihan", style = TodayType.Section, color = TodayColors.Ink)
@@ -638,18 +714,20 @@ fun MonthSummaryRoute(onBack: () -> Unit) {
     val s by vm.summary.collectAsStateWithLifecycle()
     val month by vm.month.collectAsStateWithLifecycle()
 
-    ScrollColumn {
-        DetailTopBar(onBack)
-        Text("RINGKASAN BULANAN", style = TodayType.Eyebrow, color = TodayColors.Brand)
-        MonthSwitcher(formatMonthYear(month.atDay(1)), { vm.shiftMonth(-1) }, { vm.shiftMonth(1) })
-        val sum = s ?: return@ScrollColumn
+    DetailScaffold(title = "Ringkasan bulanan", onBack = onBack) {
+        MonthSwitcher(month, { vm.shiftMonth(-1) }, { vm.shiftMonth(1) })
+        val sum = s
+        if (sum == null) {
+            LoadingSkeleton(rows = 3, showHeader = false)
+            return@DetailScaffold
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MiniStat("Masuk", "+" + formatRupiahCompact(sum.income), TodayColors.Income, Modifier.weight(1f))
             MiniStat("Keluar", "−" + formatRupiahCompact(sum.expense), TodayColors.Ink, Modifier.weight(1f))
         }
         HeroCard(if (sum.net >= 0) TodayColors.WorkoutTint else Color(0xFFFFE0DD)) {
             Text("SELISIH BULAN INI", style = TodayType.Eyebrow, color = TodayColors.Ink)
-            Text((if (sum.net >= 0) "+" else "") + formatRupiah(sum.net), style = TodayType.Hero, color = if (sum.net >= 0) TodayColors.Income else TodayColors.Danger)
+            Text((if (sum.net >= 0) "+" else "") + formatRupiah(sum.net), style = TodayType.Hero.copy(fontFeatureSettings = "tnum"), color = if (sum.net >= 0) TodayColors.Income else TodayColors.Danger, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(if (sum.net >= 0) "Pemasukan lebih besar dari pengeluaran." else "Pengeluaran melebihi pemasukan.", style = TodayType.Meta, color = TodayColors.Ink)
         }
         SectionTitle("Pengeluaran per kategori")
@@ -676,25 +754,28 @@ fun CategoriesRoute(onBack: () -> Unit) {
     var editing by remember { mutableStateOf<CategoryEntity?>(null) }
     var creating by remember { mutableStateOf<MoneyKind?>(null) }
 
-    ScrollColumn {
-        DetailTopBar(onBack)
-        Text("KATEGORI", style = TodayType.Eyebrow, color = TodayColors.Brand)
-        Text("Kategori", style = TodayType.Display, color = TodayColors.Headline)
+    DetailScaffold(title = "Kategori", onBack = onBack) {
         listOf(MoneyKind.EXPENSE to "Pengeluaran", MoneyKind.INCOME to "Pemasukan").forEach { (kind, title) ->
             SectionRow(title, "+ Tambah") { creating = kind }
             val list = all.filter { it.kind == kind }
             CardList {
                 list.forEachIndexed { i, cat ->
                     if (i > 0) Divider()
-                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp).heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "${categoryEmoji(cat.iconKey)}  ${cat.name}" + if (cat.archived) " (diarsipkan)" else "",
-                            Modifier.weight(1f).clickable(role = Role.Button) { editing = cat }.padding(vertical = 12.dp),
-                            style = TodayType.Label, color = if (cat.archived) TodayColors.Muted else TodayColors.Ink,
-                        )
+                    Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp).heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.weight(1f).clip(TodayShapes.Chip).clickable(role = Role.Button, onClickLabel = "Ganti nama") { editing = cat }.padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Icon(painterResource(categoryIcon(cat.iconKey)), null, Modifier.size(20.dp), tint = if (cat.archived) TodayColors.Muted else TodayColors.Ink)
+                            Text(
+                                cat.name + if (cat.archived) " (diarsipkan)" else "",
+                                style = TodayType.Label, color = if (cat.archived) TodayColors.Muted else TodayColors.Ink,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                         if (!cat.archived) {
-                            TextButton(onClick = { vm.moveCategory(cat.id, -1) }) { Text("↑") }
-                            TextButton(onClick = { vm.moveCategory(cat.id, 1) }) { Text("↓") }
+                            IconButton(onClick = { vm.moveCategory(cat.id, -1) }) { Icon(painterResource(R.drawable.ic_expand_less), "Naikkan ${cat.name}", tint = TodayColors.Muted) }
+                            IconButton(onClick = { vm.moveCategory(cat.id, 1) }) { Icon(painterResource(R.drawable.ic_expand_more), "Turunkan ${cat.name}", tint = TodayColors.Muted) }
                         }
                         TextButton(onClick = { vm.archiveCategory(cat.id, !cat.archived) }) { Text(if (cat.archived) "Pulihkan" else "Arsip", color = TodayColors.Muted) }
                     }
@@ -711,7 +792,7 @@ fun CategoriesRoute(onBack: () -> Unit) {
         AlertDialog(
             onDismissRequest = { editing = null; creating = null },
             title = { Text(if (target == null) "Kategori baru" else "Ganti nama", style = TodayType.CardTitle) },
-            text = { TodayTextField(name, { name = it }, "Nama kategori", capitalization = KeyboardCapitalization.Words) },
+            text = { TodayTextField(name, { name = it }, "Nama kategori", capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done) },
             confirmButton = {
                 TextButton(onClick = {
                     if (name.isNotBlank()) {
@@ -745,22 +826,22 @@ private fun WalletPanel(vm: FinanceViewModel, onManage: (() -> Unit)? = null) {
     var creating by remember { mutableStateOf(false) }
     var allocating by remember { mutableStateOf<com.farhan.today.data.db.WalletBalance?>(null) }
 
-    Text("Saldo sekarang", style = TodayType.Label)
-    Text(formatRupiah(unallocated + wallets.sumOf { it.balance }), style = TodayType.Display)
-    Text("Belum dialokasikan " + formatRupiah(unallocated), style = TodayType.Body)
+    Text("Saldo sekarang", style = TodayType.Label, color = TodayColors.Muted)
+    Text(formatRupiah(unallocated + wallets.sumOf { it.balance }), style = TodayType.Display.copy(fontFeatureSettings = "tnum"), color = TodayColors.Headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Text("Belum dialokasikan " + formatRupiah(unallocated), style = TodayType.Body, color = TodayColors.Muted)
     SectionRow("Dompet mingguan", if (onManage == null) "+ Dompet" else "Kelola") {
         if (onManage == null) creating = true else onManage()
     }
     if (onManage == null) LinkText("+ Tambah saldo") { funding = true }
-    if (wallets.isEmpty()) Text("Tambahkan saldo awal, lalu buat dan isi dompet.")
+    if (wallets.isEmpty()) Text("Tambahkan saldo awal, lalu buat dan isi dompet.", style = TodayType.Meta, color = TodayColors.Muted)
     if (funding) WalletInputDialog("Tambah saldo", "Nominal", rupiah = true, onDismiss = { funding = false }) { amount, done ->
         vm.saveTransaction(TransactionInput(MoneyKind.INCOME, amount.toLongOrNull() ?: 0, null, "Tambah saldo"), null, done)
     }
     wallets.forEach { wallet ->
         ListCard(onClick = onManage ?: { allocating = wallet }) {
-            Text(wallet.name, style = TodayType.CardTitle)
-            Text("Saldo " + formatRupiah(wallet.balance), style = TodayType.Label)
-            Text("Diisi minggu ini " + formatRupiah(wallet.allocated), style = TodayType.Meta)
+            Text(wallet.name, style = TodayType.CardTitle, color = TodayColors.Ink)
+            Text("Saldo " + formatRupiah(wallet.balance), style = TodayType.Label, color = TodayColors.Ink)
+            Text("Diisi minggu ini " + formatRupiah(wallet.allocated), style = TodayType.Meta, color = TodayColors.Muted)
         }
     }
     if (creating) WalletInputDialog("Dompet baru", "Nama dompet", onDismiss = { creating = false }) { name, done ->
@@ -794,7 +875,7 @@ private fun WalletInputDialog(
                 } else {
                     TodayTextField(value, { value = it }, label)
                 }
-                error?.let { Text(it, color = TodayColors.Danger) }
+                error?.let { Text(it, style = TodayType.Meta, color = TodayColors.Danger) }
             }
         },
         confirmButton = {
@@ -823,8 +904,9 @@ private fun PayWalletDialog(vm: FinanceViewModel, bill: BillEntity, onDismiss: (
         title = { Text("Bayar " + bill.name) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(formatRupiah(bill.amount))
-                if (eligible.isEmpty()) Text("Isi dompet dengan saldo yang cukup untuk membayar tagihan ini.")
+                Text(formatRupiah(bill.amount), style = TodayType.CardTitle.copy(fontFeatureSettings = "tnum"), color = TodayColors.Ink)
+                if (eligible.isEmpty()) Text("Isi dompet dengan saldo yang cukup untuk membayar tagihan ini.", style = TodayType.Body, color = TodayColors.Muted)
+                else FieldLabel("Bayar dari dompet")
                 ChoiceChips(eligible.map { it.id as String? to (it.name + " · " + formatRupiah(it.balance)) }, walletId, { walletId = it })
                 error?.let { Text(it, color = TodayColors.Danger) }
             }
