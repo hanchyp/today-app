@@ -1,5 +1,29 @@
 package com.farhan.today.ui.settings
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.Icon
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
+import com.farhan.today.ui.components.DetailScaffold
+import com.farhan.today.ui.components.EmptyState
+import com.farhan.today.ui.components.LoadingDetail
+import com.farhan.today.ui.components.SearchField
+import com.farhan.today.ui.components.TopBarAction
+import com.farhan.today.ui.components.screenInsets
+import com.farhan.today.ui.theme.Spacing
+
 import android.Manifest
 import android.app.Application
 import android.net.Uri
@@ -25,7 +49,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -70,7 +93,6 @@ import com.farhan.today.reminder.DailySummaryWorker
 import com.farhan.today.reminder.canPostNotifications
 import com.farhan.today.ui.components.ChoiceChips
 import com.farhan.today.ui.components.ConfirmDialog
-import com.farhan.today.ui.components.DetailTopBar
 import com.farhan.today.ui.components.FieldLabel
 import com.farhan.today.ui.components.ListCard
 import com.farhan.today.ui.components.Pill
@@ -165,15 +187,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 private fun settingsVm(): SettingsViewModel = viewModel()
 
 @Composable
-private fun ScrollColumn(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().padding(horizontal = 24.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        content = content,
-    )
-}
-
-@Composable
 private fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(TodayShapes.Card).background(TodayColors.Surface)
@@ -197,7 +210,7 @@ private fun NavRow(title: String, subtitle: String? = null, onClick: () -> Unit)
                 Text(title, style = TodayType.Label, color = TodayColors.Ink)
                 if (subtitle != null) Text(subtitle, style = TodayType.Meta, color = TodayColors.Muted)
             }
-            Text("›", style = TodayType.CardTitle, color = TodayColors.Muted)
+            Icon(painterResource(R.drawable.ic_chevron_right), null, tint = TodayColors.Muted)
         }
     }
 }
@@ -224,25 +237,44 @@ fun OnboardingScreen() {
     var startEmpty by rememberSaveable { mutableStateOf(false) }
     var notifGranted by remember { mutableStateOf(canPostNotifications(context)) }
     val askNotif = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notifGranted = it }
+    var finishing by remember { mutableStateOf(false) }
+    // Halaman disimpan di state, bukan navigasi: tanpa ini tombol kembali langsung menutup app.
+    BackHandler(enabled = page > 0) { page-- }
 
     Column(
-        Modifier.fillMaxSize().background(TodayColors.Background).verticalScroll(rememberScrollState())
-            .statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 24.dp),
+        Modifier.fillMaxSize().background(TodayColors.Background).screenInsets().verticalScroll(rememberScrollState())
+            .padding(horizontal = Spacing.ScreenH, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.semantics { contentDescription = "Langkah ${page + 1} dari 3" }, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             repeat(3) { i ->
-                Spacer(Modifier.weight(1f).height(6.dp).clip(TodayShapes.Chip).background(if (i <= page) TodayColors.Brand else TodayColors.NavStroke))
+                val color by animateColorAsState(if (i <= page) TodayColors.Brand else TodayColors.NavStroke, label = "step")
+                Spacer(Modifier.weight(1f).height(6.dp).clip(TodayShapes.Chip).background(color))
             }
         }
-        val mascot = listOf(R.drawable.mascot_wave, R.drawable.mascot_lift, R.drawable.mascot_coin)[page]
-        Image(painterResource(mascot), "Maskot kapibara Today", Modifier.align(Alignment.CenterHorizontally).size(width = 220.dp, height = 176.dp))
+        AnimatedContent(
+            targetState = page,
+            transitionSpec = {
+                val forward = targetState > initialState
+                (slideInHorizontally(tween(300)) { w -> (if (forward) 1 else -1) * w / 8 } + fadeIn(tween(210, delayMillis = 90))) togetherWith
+                    (slideOutHorizontally(tween(300)) { w -> (if (forward) -1 else 1) * w / 8 } + fadeOut(tween(90)))
+            },
+            label = "onboarding",
+        ) { p ->
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        val mascot = listOf(R.drawable.mascot_wave, R.drawable.mascot_lift, R.drawable.mascot_coin)[p]
+        // Maskot mengecil di layar pendek supaya tombol "Lanjut" tetap terlihat.
+        val short = LocalConfiguration.current.screenHeightDp < 700
+        Image(
+            painterResource(mascot), "Maskot kapibara Today",
+            Modifier.align(Alignment.CenterHorizontally).size(width = if (short) 160.dp else 220.dp, height = if (short) 128.dp else 176.dp),
+        )
 
-        when (page) {
+        when (p) {
             0 -> {
                 Text("Halo! Aku Capy.", style = TodayType.Display, color = TodayColors.Headline)
                 Text("Today membantumu melihat latihan, lamaran kerja, uang, dan tugas hari ini dalam satu layar.", style = TodayType.Body, color = TodayColors.Muted)
-                TodayTextField(name, { name = it }, "Nama panggilan", placeholder = "Farhan", capitalization = KeyboardCapitalization.Words)
+                TodayTextField(name, { name = it }, "Nama panggilan", placeholder = "Nama kamu", capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done)
                 PrimaryButton("Lanjut") { page = 1 }
             }
             1 -> {
@@ -256,7 +288,10 @@ fun OnboardingScreen() {
                 Text("Hampir siap", style = TodayType.Display, color = TodayColors.Headline)
                 Text("Izinkan notifikasi agar pengingat interview, tagihan, dan timer istirahat bisa muncul.", style = TodayType.Body, color = TodayColors.Muted)
                 if (notifGranted) {
-                    Text("✓ Notifikasi diizinkan", style = TodayType.Label, color = TodayColors.Income)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(painterResource(R.drawable.ic_check), null, Modifier.size(18.dp), tint = TodayColors.Income)
+                        Text("Notifikasi diizinkan", style = TodayType.Label, color = TodayColors.Income)
+                    }
                 } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     SecondaryButton("Izinkan notifikasi") { askNotif.launch(Manifest.permission.POST_NOTIFICATIONS) }
                 }
@@ -267,9 +302,11 @@ fun OnboardingScreen() {
                     else "Data contoh (Push Day, GDP Labs, Skripsi, anggaran makan) bisa kamu ubah atau hapus kapan saja.",
                     style = TodayType.Meta, color = if (startEmpty) TodayColors.Danger else TodayColors.Muted,
                 )
-                PrimaryButton("Mulai pakai Today") { vm.finishOnboarding(name, modules, startEmpty) }
+                PrimaryButton("Mulai pakai Today", loading = finishing) { finishing = true; vm.finishOnboarding(name, modules, startEmpty) }
                 TextButton(onClick = { page = 1 }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Kembali") }
             }
+        }
+        }
         }
     }
 }
@@ -279,7 +316,11 @@ fun OnboardingScreen() {
 @Composable
 fun SettingsRoute(onBack: () -> Unit, onNavigate: (String) -> Unit) {
     val vm = settingsVm()
-    val s = vm.settings.collectAsStateWithLifecycle().value ?: return
+    val s = vm.settings.collectAsStateWithLifecycle().value
+    if (s == null) {
+        LoadingDetail("Pengaturan", onBack)
+        return
+    }
     val scope = rememberCoroutineScope()
     var message by remember { mutableStateOf<String?>(null) }
     var pendingRestore by remember { mutableStateOf<Pair<String, BackupInfo>?>(null) }
@@ -300,13 +341,10 @@ fun SettingsRoute(onBack: () -> Unit, onNavigate: (String) -> Unit) {
         }
     }
 
-    ScrollColumn {
-        DetailTopBar(onBack)
-        Text("PENGATURAN", style = TodayType.Eyebrow, color = TodayColors.Brand)
-        Text("Pengaturan", style = TodayType.Display, color = TodayColors.Headline)
+    DetailScaffold(title = "Pengaturan", onBack = onBack) {
 
         SectionTitle("Profil")
-        TodayTextField(name, { name = it }, "Nama panggilan", capitalization = KeyboardCapitalization.Words)
+        TodayTextField(name, { name = it }, "Nama panggilan", capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done)
         if (name.trim() != s.userName && name.isNotBlank()) Pill("Simpan nama", selected = true, onClick = { vm.setName(name) })
 
         SectionTitle("Modul aktif")
@@ -334,7 +372,7 @@ fun SettingsRoute(onBack: () -> Unit, onNavigate: (String) -> Unit) {
         SectionTitle("Data")
         NavRow("Kelola kategori keuangan") { onNavigate(SettingsRoutes.CATEGORIES) }
         NavRow("Kelola gerakan latihan", "${vm.exercises.collectAsStateWithLifecycle().value.size} gerakan") { onNavigate(SettingsRoutes.EXERCISES) }
-        PrimaryButton("Backup ke file") { createDoc.launch(DataManager.fileName(today)) }
+        PrimaryButton("Backup ke file", icon = R.drawable.ic_cat_bill) { createDoc.launch(DataManager.fileName(today)) }
         Text(
             s.lastBackupAt?.let { "Backup terakhir: ${formatLongDate(Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate())}" }
                 ?: "Belum pernah backup.",
@@ -350,7 +388,6 @@ fun SettingsRoute(onBack: () -> Unit, onNavigate: (String) -> Unit) {
             "Semua data tersimpan di HP ini saja (offline). Font Inter berlisensi SIL Open Font License. Maskot kapibara dibuat dengan bantuan AI.",
             style = TodayType.Meta, color = TodayColors.Muted,
         )
-        Spacer(Modifier.height(24.dp))
     }
 
     message?.let { m ->
@@ -403,14 +440,22 @@ fun ExercisesRoute(onBack: () -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     val catalog = LocalContext.current.appContainer.exerciseCatalog
     val filtered = list.filter { it.name.contains(query.trim(), ignoreCase = true) }
+    DetailScaffold(
+        title = "Gerakan latihan",
+        onBack = onBack,
+        scrollable = false,
+        actions = { TopBarAction(R.drawable.ic_add, "Gerakan baru") { creating = true } },
+    ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(TodayColors.Background).padding(horizontal = 24.dp),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = Spacing.ScreenH, end = Spacing.ScreenH, top = 4.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        item {
-            DetailTopBar(onBack) { Pill("+ Gerakan", selected = true, onClick = { creating = true }) }
-            Text("Exercise Library", style = TodayType.Display, color = TodayColors.Headline)
-            TodayTextField(query, { query = it }, "Search exercises")
+        item(key = "search") {
+            SearchField(query, { query = it }, "Cari gerakan")
+        }
+        if (filtered.isEmpty()) item(key = "empty") {
+            EmptyState("Tidak ditemukan", "Coba kata lain, atau tambahkan gerakan baru.", mascot = R.drawable.mascot_focus)
         }
         items(filtered, key = { it.id }) { exercise ->
             val details = catalog[exercise.id]
@@ -419,10 +464,11 @@ fun ExercisesRoute(onBack: () -> Unit) {
                     .clickable(role = Role.Button) { editing = exercise }.padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(exercise.name, Modifier.weight(1f), style = TodayType.Label, color = TodayColors.Ink)
-                Text(details?.equipment ?: exercise.muscleGroup.label(), style = TodayType.Meta, color = TodayColors.Muted)
+                Text(exercise.name, Modifier.weight(1f), style = TodayType.Label, color = TodayColors.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(details?.equipment ?: exercise.muscleGroup.label(), style = TodayType.Meta, color = TodayColors.Muted, maxLines = 1)
             }
         }
+    }
     }
     val catalogDetails = editing?.let { LocalContext.current.appContainer.exerciseCatalog[it.id] }
     if (catalogDetails != null) {
@@ -432,8 +478,8 @@ fun ExercisesRoute(onBack: () -> Unit) {
             text = {
                 Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     ExerciseMedia(catalogDetails.animation)
-                    Text("Equipment: " + catalogDetails.equipment)
-                    catalogDetails.steps.forEachIndexed { index, step -> Text("${index + 1}. $step") }
+                    Text("Alat: " + catalogDetails.equipment, style = TodayType.Label, color = TodayColors.Ink)
+                    catalogDetails.steps.forEachIndexed { index, step -> Text("${index + 1}. $step", style = TodayType.Body, color = TodayColors.Ink) }
                 }
             },
             confirmButton = { TextButton(onClick = { editing = null }) { Text("Tutup") } },
@@ -447,7 +493,7 @@ fun ExercisesRoute(onBack: () -> Unit) {
             title = { Text(if (target == null) "Gerakan baru" else "Ubah gerakan", style = TodayType.CardTitle) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TodayTextField(name, { name = it }, "Nama gerakan")
+                    TodayTextField(name, { name = it }, "Nama gerakan", imeAction = ImeAction.Done)
                     ChoiceChips(MuscleGroup.entries.map { it to it.label() }, group, { group = it })
                     if (target != null) Text("Nama baru juga tampil di riwayat lama.", style = TodayType.Meta, color = TodayColors.Muted, textAlign = TextAlign.Start)
                 }
