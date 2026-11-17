@@ -1,5 +1,26 @@
 package com.farhan.today.ui.tasks
 
+import androidx.compose.foundation.layout.heightIn
+
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.text.input.ImeAction
+import com.farhan.today.ui.components.DetailScaffold
+import com.farhan.today.ui.components.LoadingDetail
+import com.farhan.today.ui.components.LoadingSkeleton
+import com.farhan.today.ui.components.TodayFab
+import com.farhan.today.ui.components.TopBarAction
+import com.farhan.today.ui.components.rememberConfirmHaptic
+import com.farhan.today.ui.components.screenInsets
+import com.farhan.today.ui.theme.Spacing
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -18,7 +39,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -71,7 +91,6 @@ import com.farhan.today.domain.formatTime
 import com.farhan.today.ui.components.ChoiceChips
 import com.farhan.today.ui.components.ConfirmDialog
 import com.farhan.today.ui.components.DateField
-import com.farhan.today.ui.components.DetailTopBar
 import com.farhan.today.ui.components.EmptyState
 import com.farhan.today.ui.components.FieldLabel
 import com.farhan.today.ui.components.Pill
@@ -113,15 +132,33 @@ fun TasksRoute(onOpenProject: (String) -> Unit) {
     val vm: TasksViewModel = viewModel(factory = vmFactory { TasksViewModel(c.taskRepository, c.clock) })
     val state by vm.state.collectAsStateWithLifecycle()
     TasksContent(
-        vm = vm, state = state, header = {
-            ScreenHeader("Tasks & projects", "Tugas", "Lihat langkah berikutnya.")
-        },
+        vm = vm, state = state, inDetail = false,
+        header = { ScreenHeader("Tasks & projects", "Tugas", "Lihat langkah berikutnya.") },
         projectSection = { openProjectForm ->
-            if (state.projects.isEmpty() && !state.loading) {
-                Pill("+ Buat proyek, misalnya Skripsi", Modifier.fillMaxWidth(), onClick = openProjectForm)
-            } else {
-                state.projects.forEach { ProjectCard(it, state.today) { onOpenProject(it.project.id) } }
-                Pill("+ Proyek baru", onClick = openProjectForm)
+            // Proyek sebagai carousel satu baris, supaya daftar tugas (isi utama tab) tidak terdorong ke bawah.
+            when {
+                state.loading -> {}
+                state.projects.isEmpty() -> Pill("+ Buat proyek, misalnya Skripsi", Modifier.fillMaxWidth(), onClick = openProjectForm)
+                else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Proyek", style = TodayType.Section, color = TodayColors.Ink, modifier = Modifier.weight(1f))
+                        Pill("Baru", icon = R.drawable.ic_add, background = TodayColors.Background, onClick = openProjectForm)
+                    }
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        // Kartu boleh melewati padding layar saat digulir.
+                        modifier = Modifier.fillMaxWidth().layout { m, cons ->
+                            val extra = Spacing.ScreenH.roundToPx() * 2
+                            val p = m.measure(cons.copy(maxWidth = cons.maxWidth + extra))
+                            layout(p.width - extra, p.height) { p.place(-extra / 2, 0) }
+                        },
+                        contentPadding = PaddingValues(horizontal = Spacing.ScreenH),
+                    ) {
+                        items(state.projects, key = { it.project.id }) { p ->
+                            ProjectCard(p, state.today, Modifier.width(260.dp)) { onOpenProject(p.project.id) }
+                        }
+                    }
+                }
             }
         },
         presetProject = null,
@@ -138,22 +175,27 @@ fun ProjectDetailRoute(id: String, onBack: () -> Unit) {
 
     if (state.projectMissing) {
         LaunchedEffect(Unit) { onBack() }
+        LoadingDetail("Proyek", onBack)
         return
     }
     val p = state.project
-    TasksContent(
-        vm = vm, state = state, presetProject = id,
-        header = {
-            DetailTopBar(onBack) {
-                Pill("Ubah", onClick = { editDialog = true })
-                Pill("Hapus", contentColor = TodayColors.Danger, onClick = { deleteDialog = true })
-            }
-            Text("PROYEK", style = TodayType.Eyebrow, color = TodayColors.Brand)
-            Text(p?.project?.name.orEmpty(), style = TodayType.Display, color = TodayColors.Headline)
-            if (!p?.project?.description.isNullOrBlank()) Text(p?.project?.description.orEmpty(), style = TodayType.Body, color = TodayColors.Muted)
+    DetailScaffold(
+        title = p?.project?.name ?: "Proyek",
+        onBack = onBack,
+        scrollable = false,
+        actions = {
+            TopBarAction(R.drawable.ic_edit, "Ubah proyek") { editDialog = true }
+            TopBarAction(R.drawable.ic_delete, "Hapus proyek", tint = TodayColors.Danger) { deleteDialog = true }
         },
-        projectSection = { if (p != null) ProjectCard(p, state.today, onClick = null) },
-    )
+    ) {
+        TasksContent(
+            vm = vm, state = state, presetProject = id, inDetail = true,
+            header = {
+                if (!p?.project?.description.isNullOrBlank()) Text(p?.project?.description.orEmpty(), style = TodayType.Body, color = TodayColors.Muted)
+            },
+            projectSection = { if (p != null) ProjectCard(p, state.today, Modifier.fillMaxWidth(), onClick = null) },
+        )
+    }
     if (deleteDialog && p != null) {
         ConfirmDialog(
             "Hapus proyek?", "${p.project.name} dan ${p.total} tugasnya akan disembunyikan.", "Hapus",
@@ -172,62 +214,77 @@ private fun TasksContent(
     vm: TasksViewModel,
     state: TasksState,
     presetProject: String?,
+    inDetail: Boolean,
     header: @Composable () -> Unit,
     projectSection: @Composable (openProjectForm: () -> Unit) -> Unit,
 ) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val haptic = rememberConfirmHaptic()
     var sheetFor by rememberSaveable { mutableStateOf<String?>(null) }
     var projectForm by remember { mutableStateOf(false) }
     var showDone by rememberSaveable { mutableStateOf(false) }
+    val list = rememberLazyListState()
 
     fun toggle(row: TaskRow) = vm.toggle(row.task.id) { status ->
-        if (status == TaskStatus.DONE) scope.launch {
-            snackbar.currentSnackbarData?.dismiss()
-            val r = snackbar.showSnackbar("“${row.task.title}” selesai", actionLabel = "Batalkan", duration = SnackbarDuration.Short)
-            if (r == SnackbarResult.ActionPerformed) vm.toggle(row.task.id)
+        if (status == TaskStatus.DONE) {
+            haptic()
+            scope.launch {
+                snackbar.currentSnackbarData?.dismiss()
+                val r = snackbar.showSnackbar("“${row.task.title}” selesai", actionLabel = "Batalkan", duration = SnackbarDuration.Short)
+                if (r == SnackbarResult.ActionPerformed) vm.toggle(row.task.id)
+            }
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .statusBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
+    Box(Modifier.fillMaxSize().then(if (inDetail) Modifier else Modifier.screenInsets())) {
+        LazyColumn(
+            state = list,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = Spacing.ScreenH, end = Spacing.ScreenH,
+                top = if (inDetail) 4.dp else Spacing.ScreenTop, bottom = Spacing.FabClearance,
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            header()
-            projectSection { projectForm = true }
-
-            SectionTitle("Berikutnya", trailing = "${state.active.size} aktif")
-            if (state.active.isEmpty() && !state.loading) {
-                EmptyState(
-                    if (state.done.isEmpty()) "Belum ada tugas" else "Semua tugas beres!",
-                    "Tambahkan langkah kecil berikutnya supaya progres tetap jalan.",
-                    mascot = R.drawable.mascot_focus,
-                )
+            item(key = "header") { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { header() } }
+            item(key = "projects") { projectSection { projectForm = true } }
+            item(key = "next") { SectionTitle("Berikutnya", trailing = "${state.active.size} aktif") }
+            if (state.loading) {
+                item(key = "loading") { LoadingSkeleton(rows = 3, showHeader = false) }
+            } else if (state.active.isEmpty()) {
+                item(key = "empty") {
+                    EmptyState(
+                        if (state.done.isEmpty()) "Belum ada tugas" else "Semua tugas beres!",
+                        "Tambahkan langkah kecil berikutnya supaya progres tetap jalan.",
+                        mascot = R.drawable.mascot_focus,
+                        modifier = Modifier.animateItem(),
+                    )
+                }
             }
-            state.active.forEach { row ->
-                TaskRowCard(row, state.today, showProject = presetProject == null, onToggle = { toggle(row) }, onOpen = { sheetFor = row.task.id })
+            items(state.active, key = { it.task.id }) { row ->
+                TaskRowCard(row, state.today, showProject = presetProject == null, Modifier.animateItem(), onToggle = { toggle(row) }, onOpen = { sheetFor = row.task.id })
             }
-            Pill("+ Tambah tugas", Modifier.fillMaxWidth(), background = TodayColors.BrandTint, contentColor = TodayColors.BrandText, onClick = { sheetFor = NEW_TASK })
-
             if (state.done.isNotEmpty()) {
-                Row(
-                    Modifier.fillMaxWidth().clip(TodayShapes.Chip).clickable(role = Role.Button) { showDone = !showDone }.padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("Selesai", style = TodayType.Section, color = TodayColors.Ink, modifier = Modifier.weight(1f))
-                    Text("${state.done.size}  ${if (showDone) "▴" else "▾"}", style = TodayType.Label, color = TodayColors.Muted)
+                item(key = "done-heading") {
+                    Row(
+                        Modifier.animateItem().fillMaxWidth().heightIn(min = 48.dp).clip(TodayShapes.Chip)
+                            .clickable(role = Role.Button, onClickLabel = if (showDone) "Lipat" else "Buka") { showDone = !showDone }
+                            .semantics { stateDescription = if (showDone) "Terbuka" else "Terlipat" },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Selesai", style = TodayType.Section, color = TodayColors.Ink, modifier = Modifier.weight(1f))
+                        Text("${state.done.size}", style = TodayType.Label, color = TodayColors.Muted)
+                        Icon(painterResource(if (showDone) R.drawable.ic_expand_less else R.drawable.ic_expand_more), null, tint = TodayColors.Muted)
+                    }
                 }
-                if (showDone) state.done.forEach { row ->
-                    TaskRowCard(row, state.today, showProject = presetProject == null, onToggle = { toggle(row) }, onOpen = { sheetFor = row.task.id })
+                if (showDone) items(state.done, key = { it.task.id }) { row ->
+                    TaskRowCard(row, state.today, showProject = presetProject == null, Modifier.animateItem(), onToggle = { toggle(row) }, onOpen = { sheetFor = row.task.id })
                 }
             }
-            Spacer(Modifier.height(72.dp))
         }
+        val expanded by remember { derivedStateOf { !list.canScrollBackward || list.lastScrolledBackward } }
+        TodayFab("Tugas", expanded, Modifier.align(Alignment.BottomEnd)) { sheetFor = NEW_TASK }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(16.dp))
     }
 
@@ -253,11 +310,10 @@ private fun TasksContent(
 }
 
 @Composable
-private fun ProjectCard(p: ProjectProgress, today: LocalDate, onClick: (() -> Unit)?) {
+private fun ProjectCard(p: ProjectProgress, today: LocalDate, modifier: Modifier = Modifier, onClick: (() -> Unit)?) {
     val progress = projectProgress(p.done, p.total)
     Column(
-        Modifier
-            .fillMaxWidth()
+        modifier
             .clip(TodayShapes.Card)
             .background(TodayColors.Tasks)
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
@@ -269,7 +325,7 @@ private fun ProjectCard(p: ProjectProgress, today: LocalDate, onClick: (() -> Un
         Text(
             p.nextDue?.let { "Deadline berikutnya ${formatLongDate(it)}" + if (it.isBefore(today)) " · terlambat" else "" }
                 ?: if (p.total > 0 && p.done == p.total) "Semua tugas selesai 🎉" else "Belum ada deadline",
-            style = TodayType.Meta, color = TodayColors.Ink,
+            style = TodayType.Meta, color = TodayColors.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(8.dp))
         ProgressBar(progress, track = Color.White, fill = TodayColors.Brand)
@@ -278,26 +334,26 @@ private fun ProjectCard(p: ProjectProgress, today: LocalDate, onClick: (() -> Un
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TaskRowCard(row: TaskRow, today: LocalDate, showProject: Boolean, onToggle: () -> Unit, onOpen: () -> Unit) {
+private fun TaskRowCard(row: TaskRow, today: LocalDate, showProject: Boolean, modifier: Modifier = Modifier, onToggle: () -> Unit, onOpen: () -> Unit) {
     val t = row.task
     val done = t.status == TaskStatus.DONE
     val boxColor by animateColorAsState(if (done) TodayColors.Ink else Color.White, label = "check")
     val badge = deadlineBadge(t.dueDate, today, done)
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clip(TodayShapes.Card)
             .background(if (done) TodayColors.Chip else TodayColors.Surface)
             .border(BorderStroke(1.dp, TodayColors.NavStroke), TodayShapes.Card)
             .combinedClickable(onClick = onOpen, onLongClick = onOpen)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+            .padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // Checkbox 48dp area sentuh
+        // Checkbox: area sentuh 48dp
         Box(
             Modifier
-                .size(44.dp)
+                .size(48.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .clickable(role = Role.Checkbox, onClick = onToggle)
                 .semantics { contentDescription = t.title; stateDescription = if (done) "Selesai" else "Belum selesai" },
@@ -307,7 +363,7 @@ private fun TaskRowCard(row: TaskRow, today: LocalDate, showProject: Boolean, on
                 Modifier.size(26.dp).clip(RoundedCornerShape(8.dp)).background(boxColor)
                     .border(2.dp, TodayColors.Ink, RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center,
-            ) { if (done) Text("✓", style = TodayType.Label, color = Color.White) }
+            ) { if (done) Icon(painterResource(R.drawable.ic_check), null, Modifier.size(18.dp), tint = Color.White) }
         }
         Column(Modifier.weight(1f)) {
             Text(
@@ -333,9 +389,13 @@ private fun TaskRowCard(row: TaskRow, today: LocalDate, showProject: Boolean, on
                 DeadlineKind.DONE -> TodayColors.WorkoutTint to TodayColors.Income
             }
             StatusBadge(
-                (if (badge.kind == DeadlineKind.OVERDUE) "! " else "") + badge.label,
+                badge.label,
                 background = bg, contentColor = fg,
-                icon = if (badge.kind == DeadlineKind.DONE) null else R.drawable.ic_calendar,
+                icon = when (badge.kind) {
+                    DeadlineKind.DONE -> null
+                    DeadlineKind.OVERDUE -> R.drawable.ic_warning
+                    else -> R.drawable.ic_calendar
+                },
             )
         }
     }
@@ -398,7 +458,7 @@ private fun TaskFormSheet(
         containerColor = TodayColors.Background,
     ) {
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).navigationBarsPadding().padding(bottom = 16.dp),
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Spacing.ScreenH).navigationBarsPadding().imePadding().padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (!loaded) {
@@ -426,9 +486,9 @@ private fun TaskFormSheet(
             }
             Spacer(Modifier.height(4.dp))
             if (saveFailed) Text("Tugas belum tersimpan. Coba lagi.", color = TodayColors.Danger, style = TodayType.Body)
-            androidx.compose.material3.Button(
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !saving,
+            PrimaryButton(
+                if (taskId == null) "Simpan tugas" else "Simpan perubahan",
+                loading = saving,
                 onClick = {
                     val input = TaskInput(title, projectId, dueDate, dueTime, priority, note)
                     if (!input.isValid) {
@@ -442,7 +502,7 @@ private fun TaskFormSheet(
                         })
                     }
                 },
-            ) { Text(if (saving) "Menyimpan…" else "Simpan") }
+            )
             if (taskId != null && allowDelete && !saving) {
                 TextButton(onClick = { vm.delete(taskId); onDeleted(title, taskId) }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                     Text("Hapus tugas", color = TodayColors.Danger, style = TodayType.Label)
@@ -469,7 +529,7 @@ private fun ProjectFormDialog(initialName: String, initialDescription: String, o
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 TodayTextField(name, { name = it; error = false }, "Nama proyek *", error = if (error) "Wajib diisi" else null)
-                TodayTextField(desc, { desc = it }, "Deskripsi")
+                TodayTextField(desc, { desc = it }, "Deskripsi", imeAction = ImeAction.Done)
             }
         },
         confirmButton = { TextButton(onClick = { if (name.isBlank()) error = true else onSave(name, desc) }) { Text("Simpan") } },
