@@ -1,5 +1,20 @@
 package com.farhan.today.ui.today
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import com.farhan.today.data.db.TaskStatus
+import com.farhan.today.ui.components.LoadingSkeleton
+import com.farhan.today.ui.components.TodayFab
+import com.farhan.today.ui.components.rememberConfirmHaptic
+import com.farhan.today.ui.components.screenInsets
+import com.farhan.today.ui.tasks.TaskFormDestination
+import kotlinx.coroutines.launch
+
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -61,7 +76,7 @@ fun AgendaItem.route(): String = when (source) {
 fun TodayRoute(modules: Set<AppModule>, onNavigate: (String) -> Unit) {
     val container = LocalContext.current.appContainer
     val vm: TodayViewModel = viewModel(factory = viewModelFactory {
-        initializer { TodayViewModel(container.ready, container.prefs, container.getTodayOverview, container.workoutRepository.inProgress()) }
+        initializer { TodayViewModel(container.ready, container.prefs, container.getTodayOverview, container.workoutRepository.inProgress(), container.taskRepository) }
     })
     val state by vm.state.collectAsStateWithLifecycle()
     var now by remember { mutableStateOf(LocalTime.now(container.clock)) }
@@ -81,7 +96,34 @@ fun TodayRoute(modules: Set<AppModule>, onNavigate: (String) -> Unit) {
             delay(60_000L - now.second * 1_000L - now.nano / 1_000_000L)
         }
     }
-    TodayScreen(state, modules, now, onNavigate)
+    // Form tugas dibuka langsung di atas Today (tanpa navigasi ke halaman kosong).
+    var taskSheet by rememberSaveable { mutableStateOf<String?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val haptic = rememberConfirmHaptic()
+    TodayScreen(
+        state, modules, now,
+        onNavigate = { route ->
+            if (route.startsWith("tasks/form")) taskSheet = route.substringAfter("task=", "").substringBefore('&')
+            else onNavigate(route)
+        },
+        snackbar = snackbar,
+        onToggleTask = { item ->
+            vm.toggleTask(item.sourceId) { status ->
+                if (status == TaskStatus.DONE) {
+                    haptic()
+                    scope.launch {
+                        snackbar.currentSnackbarData?.dismiss()
+                        val r = snackbar.showSnackbar("“${item.title}” selesai", actionLabel = "Batalkan", duration = SnackbarDuration.Short)
+                        if (r == SnackbarResult.ActionPerformed) vm.toggleTask(item.sourceId)
+                    }
+                }
+            }
+        },
+    )
+    taskSheet?.let { id ->
+        TaskFormDestination(taskId = id.ifEmpty { null }, onBack = { taskSheet = null })
+    }
 }
 
 internal val AgendaSource.module: AppModule?
@@ -104,7 +146,14 @@ private val AgendaSource.icon: Int
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TodayScreen(state: TodayUiState, modules: Set<AppModule>, now: LocalTime, onNavigate: (String) -> Unit) {
+fun TodayScreen(
+    state: TodayUiState,
+    modules: Set<AppModule>,
+    now: LocalTime,
+    onNavigate: (String) -> Unit,
+    snackbar: SnackbarHostState = remember { SnackbarHostState() },
+    onToggleTask: (AgendaItem) -> Unit = {},
+) {
     val overview = state.overview
     val agenda = overview?.items.orEmpty().filter { it.source.module == null || it.source.module in modules }
     val running = state.inProgress?.takeIf { AppModule.WORKOUT in modules }
@@ -116,14 +165,17 @@ fun TodayScreen(state: TodayUiState, modules: Set<AppModule>, now: LocalTime, on
     val (past, upcoming) = timed.partition { it.time?.isBefore(minute) == true }
     var addOpen by rememberSaveable { mutableStateOf(false) }
     var showDone by rememberSaveable { mutableStateOf(false) }
+    var showPast by rememberSaveable { mutableStateOf(true) }
+    val list = rememberLazyListState()
 
-    Box(Modifier.fillMaxSize().statusBarsPadding()) {
+    Box(Modifier.fillMaxSize().screenInsets()) {
         LazyColumn(
+            state = list,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 92.dp),
+            contentPadding = PaddingValues(start = Spacing.ScreenH, end = Spacing.ScreenH, top = Spacing.ScreenTop, bottom = Spacing.FabClearance),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item {
+            item(key = "header") {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Hari ini", style = TodayType.Display, color = TodayColors.Headline, modifier = Modifier.semantics { heading() })
@@ -138,84 +190,81 @@ fun TodayScreen(state: TodayUiState, modules: Set<AppModule>, now: LocalTime, on
                     }
                 }
             }
-            when {
-                running != null -> item {
-                    FocusCard("Lanjutkan latihan", running.name, R.drawable.mascot_lift, TodayColors.Ink) {
+            item(key = "focus") {
+                when {
+                    running != null -> FocusCard("Lanjutkan latihan", running.name, R.drawable.mascot_lift, TodayColors.Ink, "Buka sesi", dark = true) {
                         onNavigate(Routes.workoutSession(running.id))
                     }
-                }
-                focus != null -> item {
-                    val action = when (focus.source) {
-                        AgendaSource.CAREER -> "Buka lamaran"
-                        AgendaSource.CALENDAR -> "Buka acara"
-                        AgendaSource.TASK -> "Buka tugas"
-                        AgendaSource.FINANCE -> "Lihat tagihan"
-                        AgendaSource.WORKOUT -> "Buka latihan"
+                    focus != null -> {
+                        val action = when (focus.source) {
+                            AgendaSource.CAREER -> "Buka lamaran"
+                            AgendaSource.CALENDAR -> "Buka acara"
+                            AgendaSource.TASK -> "Buka tugas"
+                            AgendaSource.FINANCE -> "Lihat tagihan"
+                            AgendaSource.WORKOUT -> "Buka latihan"
+                        }
+                        val mascot = when (focus.source) {
+                            AgendaSource.WORKOUT -> R.drawable.mascot_lift
+                            AgendaSource.FINANCE -> R.drawable.mascot_coin
+                            else -> R.drawable.mascot_focus
+                        }
+                        FocusCard(focus.title, "${focus.time?.let(::formatTime) ?: "Seharian"} · ${focus.label}", mascot, TodayColors.BrandHero, action) {
+                            onNavigate(focus.route())
+                        }
                     }
-                    val mascot = when (focus.source) {
-                        AgendaSource.WORKOUT -> R.drawable.mascot_lift
-                        AgendaSource.FINANCE -> R.drawable.mascot_coin
-                        else -> R.drawable.mascot_focus
-                    }
-                    FocusCard(focus.title, "${focus.time?.let(::formatTime) ?: "Seharian"} · ${focus.label}", mascot, TodayColors.BrandHero, action) {
-                        onNavigate(focus.route())
-                    }
-                }
-                overview == null -> item { Text("Memuat agenda…", style = TodayType.Body, color = TodayColors.Muted) }
-                agenda.isEmpty() -> item {
-                    FocusCard("Belum ada agenda", "Tambahkan rencana untuk hari ini.", R.drawable.mascot_wave, TodayColors.BrandHero, "Tambah rencana") {
+                    overview == null -> LoadingSkeleton(rows = 3, showHeader = false)
+                    agenda.isEmpty() -> FocusCard("Belum ada agenda", "Tambahkan rencana untuk hari ini.", R.drawable.mascot_wave, TodayColors.BrandHero, "Tambah rencana") {
                         addOpen = true
                     }
-                }
-                open.isEmpty() -> item {
-                    FocusCard("Agenda selesai! 🎉", "Semua agenda hari ini sudah selesai.", R.drawable.mascot_wave, TodayColors.BrandHero)
-                }
-                else -> item {
-                    FocusCard("${past.size} agenda masih terbuka", "Jamnya sudah lewat. Buka agenda di bawah untuk melihat detailnya.", R.drawable.mascot_focus, TodayColors.BrandHero)
+                    open.isEmpty() -> FocusCard("Agenda selesai! 🎉", "Semua agenda hari ini sudah selesai.", R.drawable.mascot_wave, TodayColors.BrandHero)
+                    else -> FocusCard("${past.size} agenda terlewat", "Jamnya sudah lewat. Cek di bagian bawah.", R.drawable.mascot_focus, TodayColors.BrandHero)
                 }
             }
-            listOf("Waktu sudah lewat" to past, "Berikutnya" to upcoming, "Seharian" to allDay).forEach { (heading, rows) ->
+            // Yang akan datang lebih penting di dashboard harian; yang terlewat di bawah dan bisa dilipat.
+            listOf("Berikutnya" to upcoming, "Seharian" to allDay).forEach { (heading, rows) ->
                 if (rows.isNotEmpty()) {
-                    item { AgendaHeading(heading) }
-                    items(rows, key = { it.id }) { row -> AgendaRow(row) { onNavigate(row.route()) } }
+                    item(key = "h-$heading") { AgendaHeading(heading, Modifier.animateItem()) }
+                    items(rows, key = { it.id }) { row -> AgendaRow(row, Modifier.animateItem(), onToggleTask) { onNavigate(row.route()) } }
                 }
+            }
+            if (past.isNotEmpty()) {
+                item(key = "h-past") {
+                    CollapsibleHeading("Waktu sudah lewat", past.size, showPast, Modifier.animateItem()) { showPast = !showPast }
+                }
+                if (showPast) items(past, key = { it.id }) { row -> AgendaRow(row, Modifier.animateItem(), onToggleTask) { onNavigate(row.route()) } }
             }
             if (completed.isNotEmpty()) {
-                item {
-                    Pill(if (showDone) "Sembunyikan selesai (${completed.size})" else "Lihat selesai (${completed.size})", onClick = { showDone = !showDone })
+                item(key = "h-done") {
+                    CollapsibleHeading("Selesai", completed.size, showDone, Modifier.animateItem()) { showDone = !showDone }
                 }
-                if (showDone) items(completed, key = { it.id }) { row -> AgendaRow(row) { onNavigate(row.route()) } }
+                if (showDone) items(completed, key = { it.id }) { row -> AgendaRow(row, Modifier.animateItem(), onToggleTask) { onNavigate(row.route()) } }
             }
             overview?.walletBalance?.takeIf { AppModule.FINANCE in modules }?.let { balance ->
-                item {
+                item(key = "wallet") {
                     Row(
-                        Modifier.fillMaxWidth().clip(TodayShapes.Card).background(TodayColors.FinanceTrack)
+                        Modifier.animateItem().fillMaxWidth().clip(TodayShapes.Card).background(TodayColors.FinanceTrack)
                             .clickable(role = Role.Button) { onNavigate(Routes.FINANCE) }.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Icon(painterResource(R.drawable.ic_nav_finance), null, tint = TodayColors.Ink)
-                        Column {
+                        Column(Modifier.weight(1f)) {
                             Text("Saldo seluruh dompet", style = TodayType.Body, color = TodayColors.Ink)
-                            Text(formatRupiah(balance), style = TodayType.CardTitle, color = TodayColors.Ink)
+                            Text(formatRupiah(balance), style = TodayType.CardTitle.copy(fontFeatureSettings = "tnum"), color = TodayColors.Ink)
                         }
+                        Icon(painterResource(R.drawable.ic_chevron_right), null, tint = TodayColors.Ink)
                     }
                 }
             }
         }
-        ExtendedFloatingActionButton(
-            text = { Text("Tambah", style = TodayType.Label) },
-            icon = { Icon(painterResource(R.drawable.ic_add), null) },
-            onClick = { addOpen = true },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-            containerColor = TodayColors.BrandHero,
-            contentColor = TodayColors.OnBrandHero,
-        )
+        val expanded by remember { derivedStateOf { !list.canScrollBackward || list.lastScrolledBackward } }
+        TodayFab("Tambah", expanded, Modifier.align(Alignment.BottomEnd)) { addOpen = true }
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(16.dp))
     }
 
     if (addOpen) {
         ModalBottomSheet(onDismissRequest = { addOpen = false }, containerColor = TodayColors.Background) {
-            Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) {
+            Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = Spacing.ScreenH, vertical = 12.dp)) {
                 AgendaHeading("Tambah")
                 listOf(
                     Triple("Tugas", AgendaSource.TASK, Routes.taskForm()),
@@ -227,8 +276,9 @@ fun TodayScreen(state: TodayUiState, modules: Set<AppModule>, now: LocalTime, on
                         ListItem(
                             headlineContent = { Text(label, style = TodayType.Label, color = TodayColors.Ink) },
                             leadingContent = { SourceIcon(source) },
+                            trailingContent = { Icon(painterResource(R.drawable.ic_chevron_right), null, tint = TodayColors.Muted) },
                             colors = ListItemDefaults.colors(containerColor = TodayColors.Background),
-                            modifier = Modifier.clickable(role = Role.Button) {
+                            modifier = Modifier.clip(TodayShapes.Chip).clickable(role = Role.Button) {
                                 addOpen = false
                                 onNavigate(route)
                             },
@@ -239,8 +289,7 @@ fun TodayScreen(state: TodayUiState, modules: Set<AppModule>, now: LocalTime, on
     }
 }
 
-@Preview(showBackground = true, widthDp = 360, heightDp = 800)
-@Preview(showBackground = true, widthDp = 320, heightDp = 800, fontScale = 2f)
+@com.farhan.today.ui.components.PhonePreviews
 @Composable
 private fun TodayAgendaPreview() {
     val date = LocalDate.of(2026, 11, 11)
@@ -251,14 +300,28 @@ private fun TodayAgendaPreview() {
     )
     TodayTheme {
         Surface(color = TodayColors.Background) {
-            TodayScreen(TodayUiState(overview = TodayOverview(date, agenda, agenda.first(), 425_000L, emptyMap())), AppModule.entries.toSet(), LocalTime.NOON) {}
+            TodayScreen(TodayUiState(overview = TodayOverview(date, agenda, agenda.first(), 425_000L, emptyMap())), AppModule.entries.toSet(), LocalTime.NOON, onNavigate = {})
         }
     }
 }
 
 @Composable
-private fun AgendaHeading(title: String) {
-    Text(title, style = TodayType.Section, color = TodayColors.Headline, modifier = Modifier.semantics { heading() })
+private fun AgendaHeading(title: String, modifier: Modifier = Modifier) {
+    Text(title, style = TodayType.Section, color = TodayColors.Headline, modifier = modifier.padding(top = 4.dp).semantics { heading() })
+}
+
+@Composable
+private fun CollapsibleHeading(title: String, count: Int, expanded: Boolean, modifier: Modifier = Modifier, onToggle: () -> Unit) {
+    Row(
+        modifier.fillMaxWidth().heightIn(min = 48.dp).clip(TodayShapes.Chip)
+            .clickable(role = Role.Button, onClickLabel = if (expanded) "Lipat" else "Buka", onClick = onToggle)
+            .semantics { heading(); stateDescription = if (expanded) "Terbuka" else "Terlipat" },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = TodayType.Section, color = TodayColors.Headline, modifier = Modifier.weight(1f))
+        Text("$count", style = TodayType.Label, color = TodayColors.Muted)
+        Icon(painterResource(if (expanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more), null, tint = TodayColors.Muted)
+    }
 }
 
 @Composable
@@ -269,16 +332,33 @@ private fun SourceIcon(source: AgendaSource) {
 }
 
 @Composable
-private fun AgendaRow(item: AgendaItem, onClick: () -> Unit) {
+private fun AgendaRow(item: AgendaItem, modifier: Modifier = Modifier, onToggleTask: (AgendaItem) -> Unit, onClick: () -> Unit) {
     ListItem(
-        headlineContent = { Text(item.title, style = TodayType.Label, color = TodayColors.Ink) },
+        headlineContent = {
+            Text(
+                item.title, style = TodayType.Label.copy(fontSize = TodayType.Body.fontSize),
+                color = if (item.done) TodayColors.Muted else TodayColors.Ink,
+                textDecoration = if (item.done) TextDecoration.LineThrough else null,
+                maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+        },
+        // Slot supporting hanya menampilkan satu anak; dua baris dibungkus Column.
         supportingContent = {
-            val status = if (item.done) " · Selesai" else ""
-            Text("${item.time?.let(::formatTime) ?: "Seharian"} · ${item.label}$status", style = TodayType.Meta, color = TodayColors.Muted)
-            if (item.subtitle.isNotBlank()) Text(item.subtitle, style = TodayType.Meta, color = TodayColors.Muted)
+            Column {
+                val status = if (item.done) " · Selesai" else ""
+                Text("${item.time?.let(::formatTime) ?: "Seharian"} · ${item.label}$status", style = TodayType.Meta, color = TodayColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (item.subtitle.isNotBlank()) Text(item.subtitle, style = TodayType.Meta, color = TodayColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         },
         leadingContent = { SourceIcon(item.source) },
-        modifier = Modifier.clip(TodayShapes.Chip).clickable(role = Role.Button, onClick = onClick),
+        trailingContent = if (item.source == AgendaSource.TASK) ({
+            Checkbox(
+                checked = item.done, onCheckedChange = { onToggleTask(item) },
+                modifier = Modifier.semantics { contentDescription = "Tandai ${item.title} selesai" },
+                colors = CheckboxDefaults.colors(checkedColor = TodayColors.Ink, uncheckedColor = TodayColors.Ink),
+            )
+        }) else null,
+        modifier = modifier.clip(TodayShapes.Card).border(BorderStroke(1.dp, TodayColors.NavStroke), TodayShapes.Card).clickable(role = Role.Button, onClick = onClick),
         colors = ListItemDefaults.colors(containerColor = TodayColors.Surface),
     )
 }
@@ -290,21 +370,32 @@ private fun FocusCard(
     mascot: Int,
     background: Color,
     action: String? = null,
+    dark: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
+    val ink = if (dark) Color.White else TodayColors.OnBrandHero
+    val soft = if (dark) Color.White.copy(alpha = 0.75f) else TodayColors.OnBrandSoft
     BoxWithConstraints(
-        Modifier.fillMaxWidth().clip(TodayShapes.Hero).background(background).padding(20.dp),
+        Modifier.fillMaxWidth().clip(TodayShapes.Hero).background(background)
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .padding(20.dp),
     ) {
-        val showMascot = maxWidth >= 240.dp && LocalDensity.current.fontScale < 1.3f
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Maskot hanya bila teks masih punya ruang yang cukup; judul maksimal 2 baris.
+        val showMascot = maxWidth >= 280.dp && LocalDensity.current.fontScale < 1.3f
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(title, style = TodayType.Hero, color = TodayColors.OnBrandHero)
-                Text(subtitle, style = TodayType.Body, color = TodayColors.OnBrandSoft)
+                Text(title, style = TodayType.Section, color = ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(subtitle, style = TodayType.Body, color = soft, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (onClick != null) {
-                    Pill(action ?: "Buka sesi", background = TodayColors.Brand, contentColor = Color.White, onClick = onClick)
+                    Spacer(Modifier.height(2.dp))
+                    Pill(
+                        action ?: "Buka", background = if (dark) TodayColors.BrandHero else TodayColors.Brand,
+                        contentColor = if (dark) TodayColors.OnBrandHero else Color.White,
+                        trailingIcon = R.drawable.ic_chevron_right, onClick = onClick,
+                    )
                 }
             }
-            if (showMascot) Image(painterResource(mascot), null, Modifier.size(90.dp))
+            if (showMascot) Image(painterResource(mascot), null, Modifier.size(72.dp))
         }
     }
 }

@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 data class WeekDay(
@@ -41,6 +42,7 @@ class TodayViewModel(
     prefs: UserPrefs,
     getTodayOverview: GetTodayOverview,
     inProgress: Flow<WorkoutSessionEntity?>,
+    private val tasks: com.farhan.today.data.repo.TaskRepository,
 ) : ViewModel() {
 
     /** Dinaikkan saat layar kembali tampil agar "Berikutnya" dan tanggal ikut waktu sekarang. */
@@ -74,4 +76,8 @@ class TodayViewModel(
     fun refresh() {
         refresh.value++
     }
+
+    /** Centang tugas langsung dari Today; mengembalikan status baru untuk snackbar "Batalkan". */
+    fun toggleTask(id: String, onResult: (com.farhan.today.data.db.TaskStatus?) -> Unit = {}) =
+        viewModelScope.launch { onResult(tasks.toggleDone(id)) }
 }
