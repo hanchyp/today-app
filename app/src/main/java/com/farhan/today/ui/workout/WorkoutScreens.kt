@@ -1,5 +1,25 @@
 package com.farhan.today.ui.workout
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.input.ImeAction
+import com.farhan.today.ui.components.DetailScaffold
+import com.farhan.today.ui.components.KeepScreenOn
+import com.farhan.today.ui.components.LightStatusBarIcons
+import com.farhan.today.ui.components.LoadingDetail
+import com.farhan.today.ui.components.LoadingSkeleton
+import com.farhan.today.ui.components.ScreenColumn
+import com.farhan.today.ui.components.TodayFab
+import com.farhan.today.ui.components.TopBarAction
+import com.farhan.today.ui.components.fabExpanded
+import com.farhan.today.ui.components.rememberBackGuard
+import com.farhan.today.ui.components.rememberConfirmHaptic
+import com.farhan.today.ui.components.screenInsets
+import com.farhan.today.ui.theme.Spacing
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,7 +45,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -91,7 +110,6 @@ import com.farhan.today.domain.relativeDay
 import com.farhan.today.domain.shortDayName
 import com.farhan.today.ui.components.ChoiceChips
 import com.farhan.today.ui.components.ConfirmDialog
-import com.farhan.today.ui.components.DetailTopBar
 import com.farhan.today.ui.components.EmptyState
 import com.farhan.today.ui.components.FieldLabel
 import com.farhan.today.ui.components.ListCard
@@ -114,24 +132,6 @@ import java.time.Clock
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
-
-@Composable
-private fun ScrollColumn(
-    background: Color = TodayColors.Background,
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Column(
-        modifier
-            .fillMaxSize()
-            .background(background)
-            .verticalScroll(rememberScrollState())
-            .statusBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        content = content,
-    )
-}
 
 fun MuscleGroup.label(): String = when (this) {
     MuscleGroup.CHEST -> "Dada"
@@ -161,12 +161,14 @@ fun WorkoutRoute(
     val state by vm.state.collectAsStateWithLifecycle()
     var deletingHistory by remember { mutableStateOf<HistoryRow?>(null) }
     val today = LocalDate.now(c.clock)
+    val scroll = rememberScrollState()
 
-    ScrollColumn {
+    Box(Modifier.fillMaxSize()) {
+    ScreenColumn(state = scroll, bottomPadding = Spacing.FabClearance) {
         ScreenHeader("Workout tracker", "Latihan", "Rutinitas dan riwayat latihanmu.")
 
         when {
-            state.loading -> {}
+            state.loading -> LoadingSkeleton(rows = 2, showHeader = false)
             state.sessions.isEmpty() && focusId != null -> Text("Sesi latihan tidak tersedia.", style = TodayType.Body, color = TodayColors.Muted)
             state.routines.isEmpty() && state.sessions.isEmpty() -> EmptyState(
                 "Belum ada rutinitas",
@@ -183,20 +185,26 @@ fun WorkoutRoute(
                 val s = row.session
                 val running = s.status == SessionStatus.IN_PROGRESS
                 val setCount = state.routines.firstOrNull { it.routine.id == s.routineId }?.setCount ?: 0
-                Box(Modifier.fillMaxWidth().clip(TodayShapes.Hero).background(TodayColors.Workout).padding(20.dp)) {
-                    Image(
-                        painterResource(R.drawable.mascot_lift), "Maskot kapibara angkat barbel",
-                        Modifier.align(Alignment.TopEnd).size(width = 104.dp, height = 84.dp),
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        val whenText = if (running) "Sedang berlangsung" else buildString {
-                            append(if (s.plannedDate == today) "Hari ini" else formatLongDate(s.plannedDate))
-                            s.plannedTime?.let { append(" · ${formatTime(it)}") }
+                Column(
+                    Modifier.fillMaxWidth().clip(TodayShapes.Hero).background(TodayColors.Workout).padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            val whenText = if (running) "Sedang berlangsung" else buildString {
+                                append(if (s.plannedDate == today) "Hari ini" else formatLongDate(s.plannedDate))
+                                s.plannedTime?.let { append(" · ${formatTime(it)}") }
+                            }
+                            StatusBadge(whenText, background = Color.White)
+                            Spacer(Modifier.height(4.dp))
+                            Text(s.name, style = TodayType.Hero, color = TodayColors.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            if (!row.focus.isNullOrBlank()) Text(row.focus, style = TodayType.Body, color = TodayColors.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
-                        StatusBadge(whenText, background = Color.White)
-                        Spacer(Modifier.height(4.dp))
-                        Text(s.name, style = TodayType.Hero, color = TodayColors.Ink, modifier = Modifier.padding(end = 96.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        if (!row.focus.isNullOrBlank()) Text(row.focus, style = TodayType.Body, color = TodayColors.Ink)
+                        if (LocalDensity.current.fontScale < 1.3f) {
+                            Image(painterResource(R.drawable.mascot_lift), "Maskot kapibara angkat barbel", Modifier.size(width = 84.dp, height = 68.dp))
+                        }
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             StatusBadge("${row.exerciseCount} gerakan", background = Color.White.copy(alpha = 0.6f))
                             if (setCount > 0) StatusBadge("$setCount set", background = Color.White.copy(alpha = 0.6f))
@@ -219,21 +227,6 @@ fun WorkoutRoute(
             StatCard("${state.week.done} / ${state.week.target}", "sesi minggu ini", Modifier.weight(1f))
             StatCard(formatDuration(state.week.minutes), "total durasi", Modifier.weight(1f))
         }
-        Row(
-            Modifier.fillMaxWidth().clip(TodayShapes.Card).background(TodayColors.Surface)
-                .border(BorderStroke(1.dp, TodayColors.NavStroke), TodayShapes.Card).padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("Ingatkan sebelum latihan", style = TodayType.Label, color = TodayColors.Ink)
-                Text("Notifikasi 30 menit sebelum jadwal", style = TodayType.Meta, color = TodayColors.Muted)
-            }
-            Switch(
-                checked = state.reminders, onCheckedChange = vm::setReminders,
-                colors = SwitchDefaults.colors(checkedTrackColor = TodayColors.Brand),
-            )
-        }
-
         if (state.routines.isNotEmpty()) {
             SectionTitle("Rutinitas", trailing = "${state.routines.size}")
             state.routines.forEach { r ->
@@ -246,12 +239,11 @@ fun WorkoutRoute(
                                 style = TodayType.Meta, color = TodayColors.Muted,
                             )
                         }
-                        Pill("Mulai", background = TodayColors.WorkoutTint, onClick = { vm.startRoutineNow(r.routine.id, onOpenSession) })
+                        Pill("Mulai", icon = R.drawable.ic_play, background = TodayColors.WorkoutTint, onClick = { vm.startRoutineNow(r.routine.id, onOpenSession) })
                     }
                 }
             }
         }
-        Pill("+ Rutinitas baru", Modifier.fillMaxWidth(), background = TodayColors.BrandTint, contentColor = TodayColors.BrandText, onClick = onNewRoutine)
 
         SectionTitle("Riwayat")
         if (state.history.isEmpty() && !state.loading) {
@@ -263,13 +255,12 @@ fun WorkoutRoute(
             ) {
                 state.history.forEachIndexed { i, h ->
                     if (i > 0) Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp).background(TodayColors.NavStroke))
-                    HistoryItem(h, today) { onOpenHistory(h.session.id) }
-                    TextButton(onClick = { deletingHistory = h }, modifier = Modifier.align(Alignment.End)) {
-                        Text("Hapus sesi", color = TodayColors.Danger)
-                    }
+                    HistoryItem(h, today, onDelete = { deletingHistory = h }) { onOpenHistory(h.session.id) }
                 }
             }
         }
+    }
+    TodayFab("Rutinitas", scroll.fabExpanded, Modifier.align(Alignment.BottomEnd), onClick = onNewRoutine)
     }
     deletingHistory?.let { entry ->
         ConfirmDialog("Hapus sesi latihan?", "Set latihan ini juga dihapus dari grafik progres dan rekor.", "Hapus",
@@ -290,10 +281,11 @@ private fun StatCard(big: String, small: String, modifier: Modifier) {
 }
 
 @Composable
-private fun HistoryItem(h: HistoryRow, today: LocalDate, onClick: () -> Unit) {
+private fun HistoryItem(h: HistoryRow, today: LocalDate, onDelete: () -> Unit, onClick: () -> Unit) {
     val minutes = WorkoutMath.durationMinutes(h.session)
+    var menu by remember { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -305,6 +297,16 @@ private fun HistoryItem(h: HistoryRow, today: LocalDate, onClick: () -> Unit) {
             )
         }
         Text(formatDuration(minutes), style = TodayType.Label, color = TodayColors.Ink)
+        Box {
+            IconButton(onClick = { menu = true }) { Icon(painterResource(R.drawable.ic_more_vert), "Opsi ${h.session.name}", tint = TodayColors.Muted) }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(
+                    text = { Text("Hapus sesi", color = TodayColors.Danger) },
+                    leadingIcon = { Icon(painterResource(R.drawable.ic_delete), null, tint = TodayColors.Danger) },
+                    onClick = { menu = false; onDelete() },
+                )
+            }
+        }
     }
 }
 
@@ -320,14 +322,23 @@ fun RoutineFormRoute(id: String?, onBack: () -> Unit) {
     var picker by rememberSaveable { mutableStateOf(false) }
     var deleteDialog by remember { mutableStateOf(false) }
     var guide by remember { mutableStateOf<ExerciseDraft?>(null) }
-    if (!vm.loaded) return
+    val title = if (vm.isEdit) "Ubah rutinitas" else "Rutinitas baru"
+    if (!vm.loaded) {
+        LoadingDetail(title, onBack)
+        return
+    }
+    val back = rememberBackGuard(vm.dirty, onBack)
 
-    ScrollColumn(background = TodayColors.Surface, modifier = Modifier.imePadding()) {
-        DetailTopBar(onBack) {
-            if (vm.isEdit) Pill("Hapus", contentColor = TodayColors.Danger, onClick = { deleteDialog = true })
-        }
-        Text(if (vm.isEdit) "UBAH RUTINITAS" else "RUTINITAS BARU", style = TodayType.Eyebrow, color = TodayColors.Brand)
-        Text(vm.name.ifBlank { "Rutinitas" }, style = TodayType.Display, color = TodayColors.Headline, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    DetailScaffold(
+        title = title,
+        onBack = back,
+        actions = {
+            if (vm.isEdit) TopBarAction(R.drawable.ic_delete, "Hapus rutinitas", tint = TodayColors.Danger) { deleteDialog = true }
+        },
+        bottomBar = {
+            PrimaryButton(if (vm.isEdit) "Simpan perubahan" else "Simpan rutinitas", loading = vm.saving) { vm.save(onBack) }
+        },
+    ) {
 
         TodayTextField(vm.name, { vm.name = it }, "Nama *", placeholder = "Push Day", error = if (vm.showErrors && vm.name.isBlank()) "Wajib diisi" else null, capitalization = KeyboardCapitalization.Words)
         TodayTextField(vm.focus, { vm.focus = it }, "Fokus", placeholder = "Dada, bahu, dan trisep")
@@ -355,10 +366,7 @@ fun RoutineFormRoute(id: String?, onBack: () -> Unit) {
                 )
             }
         }
-        Pill("+ Tambah gerakan", Modifier.fillMaxWidth(), background = TodayColors.WorkoutTint, onClick = { picker = true })
-
-        Spacer(Modifier.height(8.dp))
-        PrimaryButton(if (vm.isEdit) "Simpan perubahan" else "Simpan rutinitas") { vm.save(onBack) }
+        Pill("Tambah gerakan", Modifier.fillMaxWidth(), icon = R.drawable.ic_add, background = TodayColors.WorkoutTint, onClick = { picker = true })
         Text(
             "Mengubah rutinitas hanya memengaruhi sesi yang akan datang. Riwayat latihan tetap seperti saat dicatat.",
             style = TodayType.Meta, color = TodayColors.Muted,
@@ -406,7 +414,7 @@ private fun RoutineExerciseEditor(
                     val animation = exercise.animation
                     if (animation != null) {
                         ExerciseImage(animation, Modifier.fillMaxSize()) {
-                            Text("▶", color = TodayColors.Brand)
+                            Icon(painterResource(R.drawable.ic_play), null, tint = TodayColors.Brand)
                         }
                     } else {
                         Text(exercise.name.take(1), style = TodayType.Label, color = TodayColors.Muted)
@@ -416,10 +424,10 @@ private fun RoutineExerciseEditor(
                     Text(exercise.name, style = TodayType.CardTitle, color = TodayColors.Brand)
                     Text(exercise.group.label(), style = TodayType.Meta, color = TodayColors.Muted)
                 }
-                if (exercise.animation != null) Text("▶", style = TodayType.Meta, color = TodayColors.Brand)
+                if (exercise.animation != null) Icon(painterResource(R.drawable.ic_play), "Lihat animasi", Modifier.size(20.dp), tint = TodayColors.Brand)
             }
             Box {
-                SmallButton("⋮", "Opsi gerakan") { menu = true }
+                SmallButton(R.drawable.ic_more_vert, "Opsi gerakan") { menu = true }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text("Pindah ke atas") }, enabled = onMoveUp != null,
                         onClick = { menu = false; onMoveUp?.invoke() })
@@ -451,14 +459,14 @@ private fun RoutineExerciseEditor(
                         KeyboardType.Decimal, showErrors && !set.validWeight, "—")
                     RoutineSetField(set.reps, { set.reps = it }, "Repetisi set ${index + 1}", Modifier.weight(1f),
                         KeyboardType.Number, showErrors && set.targetReps == null, "—")
-                    SmallButton("✕", "Hapus set ${index + 1}", enabled = exercise.sets.size > 1) { exercise.sets.remove(set) }
+                    SmallButton(R.drawable.ic_close, "Hapus set ${index + 1}", enabled = exercise.sets.size > 1) { exercise.sets.remove(set) }
                 }
             }
         }
         if (showErrors && exercise.sets.any { it.targetReps == null || !it.validWeight }) {
             Text("Isi 1–100 repetisi dan beban yang valid, atau kosongkan beban.", style = TodayType.Meta, color = TodayColors.Danger)
         }
-        Pill("+ Tambah set", Modifier.fillMaxWidth(), background = TodayColors.Chip,
+        Pill("Tambah set", Modifier.fillMaxWidth(), icon = R.drawable.ic_add, background = TodayColors.Chip,
             onClick = if (exercise.sets.size < 20) exercise::addSet else null)
         HorizontalDivider(color = TodayColors.NavStroke, modifier = Modifier.padding(top = 8.dp))
     }
@@ -499,19 +507,23 @@ private fun RoutineSetField(
         singleLine = true,
         isError = isError,
         shape = TodayShapes.Chip,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        textStyle = TodayType.Label.copy(textAlign = TextAlign.Center),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Next),
+        textStyle = TodayType.Label.copy(textAlign = TextAlign.Center, fontFeatureSettings = "tnum"),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = TodayColors.Surface, unfocusedContainerColor = TodayColors.Surface,
+            unfocusedBorderColor = TodayColors.NavStroke, focusedBorderColor = TodayColors.Brand,
+        ),
     )
 }
 
 @Composable
-private fun SmallButton(symbol: String, description: String, enabled: Boolean = true, onClick: () -> Unit) {
+private fun SmallButton(icon: Int, description: String, enabled: Boolean = true, tint: Color = TodayColors.Ink, onClick: () -> Unit) {
     Box(
         Modifier.size(48.dp).clip(CircleShape)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
-    ) { Text(symbol, style = TodayType.Label, color = if (enabled) TodayColors.Ink else TodayColors.NavStroke) }
+    ) { Icon(painterResource(icon), null, Modifier.size(20.dp), tint = if (enabled) tint else tint.copy(alpha = 0.3f)) }
 }
 
 @Composable
@@ -520,12 +532,12 @@ private fun MiniStepper(label: String, value: String, modifier: Modifier, onMinu
         modifier.clip(TodayShapes.Chip).background(TodayColors.Chip).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SmallButton("−", "Kurangi $label", onClick = onMinus)
+        SmallButton(R.drawable.ic_remove, "Kurangi $label", onClick = onMinus)
         Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(label.uppercase(), style = TodayType.Tiny, color = TodayColors.Muted)
-            Text(value, style = TodayType.Label, color = TodayColors.Ink, maxLines = 1)
+            Text(value, style = TodayType.Label.copy(fontFeatureSettings = "tnum"), color = TodayColors.Ink, maxLines = 1)
         }
-        SmallButton("+", "Tambah $label", onClick = onPlus)
+        SmallButton(R.drawable.ic_add, "Tambah $label", onClick = onPlus)
     }
 }
 
@@ -557,21 +569,27 @@ fun SessionRoute(sessionId: String, onBack: () -> Unit, onFinished: (String) -> 
             else -> {}
         }
     }
-    if (state.loading || session == null) return
+    KeepScreenOn()
+    LightStatusBarIcons()
+    if (state.loading || session == null) {
+        Column(Modifier.fillMaxSize().background(SessionBackground).screenInsets().padding(Spacing.ScreenH)) {
+            LoadingSkeleton(rows = 3)
+        }
+        return
+    }
 
     val blocks = state.blocks
     val allSets = blocks.flatMap { it.sets }
     val completed = allSets.count { it.done }
 
-    Column(Modifier.fillMaxSize().background(SessionBackground).statusBarsPadding().navigationBarsPadding()) {
+    Column(Modifier.fillMaxSize().background(SessionBackground).screenInsets()) {
         Row(
-            Modifier.fillMaxWidth().background(SessionSurface).padding(horizontal = 16.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().background(SessionSurface).padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Pill("‹", background = SessionBackground, contentColor = Color.White,
-                modifier = Modifier.semantics { contentDescription = "Kembali" }, onClick = onBack)
-            Text("Catat latihan", Modifier.weight(1f), style = TodayType.Section, color = Color.White)
+            IconButton(onClick = onBack) { Icon(painterResource(R.drawable.ic_arrow_back), "Kembali", tint = Color.White) }
+            Text("Catat latihan", Modifier.weight(1f), style = TodayType.Section, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Pill("Selesai", background = TodayColors.BrandHero, contentColor = TodayColors.OnBrandHero) {
                 if (completed < allSets.size) finishDialog = true else vm.finish { onFinished(sessionId) }
             }
@@ -580,7 +598,16 @@ fun SessionRoute(sessionId: String, onBack: () -> Unit, onFinished: (String) -> 
             if (allSets.isEmpty()) 0f else completed.toFloat() / allSets.size,
             track = SessionSurface, fill = SessionAccent, height = 4.dp,
         )
-        state.restRemaining?.let { RestBar(it, state.restTotal, vm::skipRest) }
+        // Getar saat timer istirahat habis (F1).
+        val haptic = rememberConfirmHaptic()
+        var hadRest by remember { mutableStateOf(false) }
+        LaunchedEffect(state.restRemaining) {
+            if (state.restRemaining != null) hadRest = true
+            else if (hadRest) { hadRest = false; haptic() }
+        }
+        AnimatedVisibility(state.restRemaining != null) {
+            state.restRemaining?.let { RestBar(it, state.restTotal, vm::skipRest) }
+        }
 
         LazyColumn(
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -614,7 +641,7 @@ fun SessionRoute(sessionId: String, onBack: () -> Unit, onFinished: (String) -> 
             }
             item {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Pill("+ Tambah gerakan", Modifier.fillMaxWidth(), background = SessionAccent, contentColor = TodayColors.Ink) {
+                    Pill("Tambah gerakan", Modifier.fillMaxWidth(), icon = R.drawable.ic_add, background = SessionAccent, contentColor = TodayColors.Ink) {
                         addExercise = true
                     }
                     TextButton(onClick = { discardDialog = true }) {
@@ -691,7 +718,7 @@ private fun SessionStats(startedAt: Long?, clock: Clock, volume: Double, complet
         ).forEach { (label, value) ->
             Column(Modifier.weight(1f)) {
                 Text(label, style = TodayType.Meta, color = SessionMuted)
-                Text(value, style = TodayType.CardTitle, color = Color.White)
+                Text(value, style = TodayType.CardTitle.copy(fontFeatureSettings = "tnum"), color = Color.White, maxLines = 1)
             }
         }
     }
@@ -705,7 +732,7 @@ private fun RestBar(left: Int, total: Int, onSkip: () -> Unit) {
     ) {
         Column(Modifier.weight(1f)) {
             Text("TIMER ISTIRAHAT", style = TodayType.Eyebrow, color = SessionAccent)
-            Text("%d:%02d".format(left / 60, left % 60), style = TodayType.Hero.copy(fontSize = 28.sp), color = Color.White)
+            Text("%d:%02d".format(left / 60, left % 60), style = TodayType.Hero.copy(fontFeatureSettings = "tnum"), color = Color.White)
             Spacer(Modifier.height(4.dp))
             ProgressBar(if (total > 0) 1f - left.toFloat() / total else 0f, track = Color.White.copy(alpha = 0.2f), fill = TodayColors.Workout, height = 6.dp)
         }
@@ -730,6 +757,7 @@ private fun SetTable(
 ) {
     var deleteTarget by remember { mutableStateOf<SetLogEntity?>(null) }
     val lastByIndex = remember(last) { last.associateBy { it.setIndex } }
+    val haptic = rememberConfirmHaptic()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             Modifier.fillMaxWidth().clip(TodayShapes.Card).clickable(role = Role.Button, onClick = onGuide),
@@ -739,7 +767,7 @@ private fun SetTable(
             Box(Modifier.size(48.dp).clip(CircleShape).background(SessionSurface), contentAlignment = Alignment.Center) {
                 if (block.animation != null) {
                     ExerciseImage(block.animation, Modifier.fillMaxSize()) {
-                        Text("▶", style = TodayType.Label, color = SessionAccent)
+                        Icon(painterResource(R.drawable.ic_play), null, tint = SessionAccent)
                     }
                 } else {
                     Text(block.name.take(1), style = TodayType.Label, color = SessionMuted)
@@ -752,8 +780,7 @@ private fun SetTable(
                 }
             }
             if (block.animation != null) {
-                Text("▶", style = TodayType.Label, color = SessionAccent,
-                    modifier = Modifier.padding(horizontal = 8.dp).semantics { contentDescription = "Lihat animasi" })
+                Icon(painterResource(R.drawable.ic_play), "Lihat animasi", Modifier.padding(horizontal = 8.dp).size(20.dp), tint = SessionAccent)
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -761,7 +788,7 @@ private fun SetTable(
             listOf("SEBELUMNYA" to 1.4f, "KG" to 1f, "REP" to 0.8f).forEach { (label, weight) ->
                 Text(label, Modifier.weight(weight), style = TodayType.Tiny, color = SessionMuted, textAlign = TextAlign.Center)
             }
-            Text("✓", Modifier.width(48.dp), style = TodayType.Label, color = SessionMuted, textAlign = TextAlign.Center)
+            Text("OK", Modifier.width(48.dp), style = TodayType.Tiny, color = SessionMuted, textAlign = TextAlign.Center)
         }
         block.sets.forEachIndexed { i, set ->
             val selected = set.id == selectedId
@@ -787,7 +814,7 @@ private fun SetTable(
                     Text("${set.reps}", Modifier.weight(0.8f), style = TodayType.Label, color = Color.White, textAlign = TextAlign.Center)
                     Box(
                         Modifier.size(48.dp)
-                            .clickable(role = Role.Checkbox) { onToggle(set) }
+                            .clickable(role = Role.Checkbox) { if (!set.done) haptic(); onToggle(set) }
                             .semantics { contentDescription = "Set ${i + 1}"; stateDescription = if (set.done) "Selesai" else "Belum selesai" },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -796,7 +823,7 @@ private fun SetTable(
                                 .background(if (set.done) TodayColors.Workout else SessionBackground),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text("✓", style = TodayType.Label, color = if (set.done) TodayColors.Ink else SessionMuted)
+                            Icon(painterResource(R.drawable.ic_check), null, Modifier.size(20.dp), tint = if (set.done) TodayColors.Ink else SessionMuted)
                         }
                     }
                 }
@@ -804,11 +831,16 @@ private fun SetTable(
                     Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         MiniStepper("Beban ±2,5", formatKg(set.weightKg), Modifier.fillMaxWidth(), { onWeight(set, -WorkoutMath.WEIGHT_STEP) }, { onWeight(set, WorkoutMath.WEIGHT_STEP) })
                         MiniStepper("Rep", "${set.reps}", Modifier.fillMaxWidth(), { onReps(set, -1) }, { onReps(set, 1) })
+                        TextButton(onClick = { deleteTarget = set }, modifier = Modifier.align(Alignment.End)) {
+                            Icon(painterResource(R.drawable.ic_delete), null, Modifier.size(18.dp), tint = SessionMuted)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Hapus set", style = TodayType.Label, color = SessionMuted)
+                        }
                     }
                 }
             }
         }
-        Pill("+ Tambah set", Modifier.fillMaxWidth(), background = SessionSurface, contentColor = Color.White, onClick = onAddSet)
+        Pill("Tambah set", Modifier.fillMaxWidth(), icon = R.drawable.ic_add, background = SessionSurface, contentColor = Color.White, onClick = onAddSet)
         HorizontalDivider(color = SessionSurface, modifier = Modifier.padding(top = 8.dp))
     }
     deleteTarget?.let { t ->
@@ -824,20 +856,27 @@ fun SessionSummaryRoute(sessionId: String, celebrate: Boolean, onBack: () -> Uni
     val c = LocalContext.current.appContainer
     val vm: SessionSummaryViewModel = viewModel(factory = vmFactory { SessionSummaryViewModel(c.workoutRepository, sessionId) })
     val state by vm.state.collectAsStateWithLifecycle()
-    val s = state.summary ?: return
     val today = LocalDate.now(c.clock)
+    val s = state.summary
+    if (s == null) {
+        LoadingDetail("Ringkasan latihan", onBack)
+        return
+    }
 
-    ScrollColumn(background = if (celebrate) TodayColors.Workout else TodayColors.Background) {
-        DetailTopBar(onBack)
+    DetailScaffold(
+        title = if (celebrate) "" else "Riwayat latihan",
+        onBack = onBack,
+        background = if (celebrate) TodayColors.Workout else TodayColors.Background,
+        bottomBar = if (celebrate) ({ PrimaryButton("Kembali ke Latihan", background = TodayColors.Ink, onClick = onBack) }) else null,
+    ) {
         if (celebrate) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Image(painterResource(R.drawable.mascot_lift), "Maskot kapibara angkat barbel", Modifier.size(width = 200.dp, height = 160.dp))
+                Image(painterResource(R.drawable.mascot_lift), "Maskot kapibara angkat barbel", Modifier.size(width = 180.dp, height = 144.dp))
                 Text("Latihan selesai!", style = TodayType.Display, color = TodayColors.Ink, textAlign = TextAlign.Center)
                 Text(s.session.name, style = TodayType.Body, color = TodayColors.Ink)
             }
         } else {
-            Text("RIWAYAT LATIHAN", style = TodayType.Eyebrow, color = TodayColors.Brand)
-            Text(s.session.name, style = TodayType.Display, color = TodayColors.Headline)
+            Text(s.session.name, style = TodayType.Title, color = TodayColors.Headline)
             Text(
                 formatLongDate(s.session.plannedDate) + (s.session.startedAt?.let { " · mulai ${formatTime(Instant.ofEpochMilli(it).atZone(c.clock.zone).toLocalTime())}" } ?: ""),
                 style = TodayType.Body, color = TodayColors.Muted,
@@ -850,7 +889,7 @@ fun SessionSummaryRoute(sessionId: String, celebrate: Boolean, onBack: () -> Uni
         }
         if (s.records.isNotEmpty()) {
             Column(Modifier.fillMaxWidth().clip(TodayShapes.Card).background(TodayColors.Career).padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("🏆  REKOR BARU", style = TodayType.Eyebrow, color = TodayColors.Ink)
+                Text("REKOR BARU", style = TodayType.Eyebrow, color = TodayColors.Ink)
                 s.records.forEach { pr ->
                     Text("${pr.exerciseName}: ${formatKg(pr.weightKg)} (sebelumnya ${formatKg(pr.previousKg)})", style = TodayType.Label, color = TodayColors.Ink)
                 }
@@ -862,7 +901,8 @@ fun SessionSummaryRoute(sessionId: String, celebrate: Boolean, onBack: () -> Uni
             ListCard(onClick = { onOpenExercise(b.exerciseId) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(b.name, Modifier.weight(1f), style = TodayType.Label.copy(fontSize = 15.sp), color = TodayColors.Ink)
-                    Text("Grafik ›", style = TodayType.Label, color = TodayColors.Brand)
+                    Text("Grafik", style = TodayType.Label, color = TodayColors.Brand)
+                    Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.size(18.dp), tint = TodayColors.Brand)
                 }
                 b.sets.forEachIndexed { i, set ->
                     Text(
@@ -872,8 +912,7 @@ fun SessionSummaryRoute(sessionId: String, celebrate: Boolean, onBack: () -> Uni
                 }
             }
         }
-        if (celebrate) PrimaryButton("Kembali ke Latihan", background = TodayColors.Ink, onClick = onBack)
-        else Text("Dicatat ${relativeDay(s.session.plannedDate, today).lowercase()}", style = TodayType.Meta, color = TodayColors.Muted)
+        if (!celebrate) Text("Dicatat ${relativeDay(s.session.plannedDate, today).lowercase()}", style = TodayType.Meta, color = TodayColors.Muted)
     }
 }
 
@@ -886,12 +925,12 @@ fun ExerciseProgressRoute(exerciseId: String, onBack: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val zone = c.clock.zone
 
-    ScrollColumn {
-        DetailTopBar(onBack)
-        Text("PROGRES BEBAN", style = TodayType.Eyebrow, color = TodayColors.Brand)
-        Text(state.name, style = TodayType.Display, color = TodayColors.Headline)
+    DetailScaffold(title = "Progres beban", onBack = onBack) {
+        Text(state.name, style = TodayType.Title, color = TodayColors.Headline)
         val pts = state.points
-        if (pts.isEmpty() && !state.loading) {
+        if (state.loading) {
+            LoadingSkeleton(rows = 3, showHeader = false)
+        } else if (pts.isEmpty()) {
             EmptyState("Belum ada data", "Catat gerakan ini di sesi latihan untuk melihat grafiknya.", mascot = R.drawable.mascot_focus)
         } else if (pts.isNotEmpty()) {
             val best = pts.maxOf { it.maxKg }

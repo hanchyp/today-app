@@ -149,7 +149,17 @@ class RoutineFormViewModel(
     var showErrors by mutableStateOf(false)
     var loaded by mutableStateOf(id == null)
         private set
+    var saving by mutableStateOf(false)
+        private set
     val isEdit = id != null
+
+    /** Ringkasan seluruh isian; dibandingkan dengan saat form dibuka untuk "Buang perubahan?". */
+    private fun snapshot(): String = buildString {
+        append(name).append('|').append(focus).append('|').append(days.sorted()).append('|').append(time)
+        items.forEach { d -> append('|').append(d.exerciseId).append(':').append(d.restSeconds); d.sets.forEach { append(',').append(it.reps).append('x').append(it.weight) } }
+    }
+    private var initial by mutableStateOf(snapshot())
+    val dirty: Boolean get() = loaded && !saving && snapshot() != initial
 
     val catalog: StateFlow<List<ExerciseEntity>> =
         repo.catalog().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -169,6 +179,7 @@ class RoutineFormViewModel(
             val sc = repo.schedulesFor(id)
             days = sc.map { DayOfWeek.of(it.dayOfWeek) }.toSet()
             sc.firstOrNull()?.let { time = it.time }
+            initial = snapshot()
             loaded = true
         }
     }
@@ -187,6 +198,7 @@ class RoutineFormViewModel(
     }
 
     fun save(onSaved: () -> Unit) {
+        if (saving) return
         if (name.isBlank() || items.isEmpty() || items.any { item ->
                 item.sets.any { it.targetReps == null || !it.validWeight }
             }) {
@@ -202,6 +214,7 @@ class RoutineFormViewModel(
             },
             days, time,
         )
+        saving = true
         viewModelScope.launch { repo.saveRoutine(input, id); onSaved() }
     }
 
