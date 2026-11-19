@@ -81,6 +81,7 @@ import com.farhan.today.R
 import com.farhan.today.appContainer
 import com.farhan.today.data.backup.BackupException
 import com.farhan.today.data.backup.BackupInfo
+import com.farhan.today.data.backup.DataFeature
 import com.farhan.today.data.backup.DataManager
 import com.farhan.today.data.db.ExerciseEntity
 import com.farhan.today.data.db.MuscleGroup
@@ -171,6 +172,14 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     fun wipe(onDone: () -> Unit) = viewModelScope.launch {
         c.restTimer.cancel()
         c.dataManager.wipe()
+        onDone()
+    }
+
+    suspend fun countFeature(f: DataFeature): Int = c.dataManager.count(f)
+
+    fun resetFeature(f: DataFeature, onDone: () -> Unit) = viewModelScope.launch {
+        if (f == DataFeature.WORKOUT) c.restTimer.cancel()
+        c.dataManager.reset(f)
         onDone()
     }
 
@@ -325,6 +334,7 @@ fun SettingsRoute(onBack: () -> Unit, onNavigate: (String) -> Unit) {
     var message by remember { mutableStateOf<String?>(null) }
     var pendingRestore by remember { mutableStateOf<Pair<String, BackupInfo>?>(null) }
     var wipeDialog by remember { mutableStateOf(false) }
+    var pendingReset by remember { mutableStateOf<Pair<DataFeature, Int>?>(null) }
     var name by rememberSaveable(s.userName) { mutableStateOf(s.userName) }
     val today = LocalDate.now()
 
@@ -380,6 +390,12 @@ fun SettingsRoute(onBack: () -> Unit, onNavigate: (String) -> Unit) {
         )
         SecondaryButton("Pulihkan dari backup") { openDoc.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
         SwitchRow("Ingatkan backup mingguan", "Hanya jika belum backup 7 hari terakhir", s.backupReminder, vm::setBackupReminder)
+
+        SectionTitle("Reset per fitur")
+        Text("Hapus data satu fitur saja. Fitur lain tidak ikut terhapus.", style = TodayType.Meta, color = TodayColors.Muted)
+        DataFeature.entries.forEach { f ->
+            NavRow("Reset ${f.label}", f.description) { scope.launch { pendingReset = f to vm.countFeature(f) } }
+        }
         TextButton(onClick = { wipeDialog = true }) { Text("Hapus semua data…", color = TodayColors.Danger, style = TodayType.Label) }
 
         SectionTitle("Tentang")
@@ -402,6 +418,16 @@ fun SettingsRoute(onBack: () -> Unit, onNavigate: (String) -> Unit) {
             confirmLabel = "Timpa & pulihkan",
             onConfirm = { pendingRestore = null; vm.restore(json) { message = it } },
             onDismiss = { pendingRestore = null },
+            destructive = true,
+        )
+    }
+    pendingReset?.let { (f, rows) ->
+        ConfirmDialog(
+            title = "Reset ${f.label}?",
+            message = "${f.description} Total $rows baris akan dihapus permanen. Data fitur lain tetap aman. Buat backup dulu kalau ragu.",
+            confirmLabel = "Reset ${f.label}",
+            onConfirm = { pendingReset = null; vm.resetFeature(f) { message = "Data ${f.label} sudah direset." } },
+            onDismiss = { pendingReset = null },
             destructive = true,
         )
     }

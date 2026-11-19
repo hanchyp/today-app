@@ -7,6 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.farhan.today.data.db.CategoryEntity
 import com.farhan.today.data.db.ExerciseEntity
 import com.farhan.today.data.db.MoneyKind
+import com.farhan.today.data.db.ReminderSource
 import com.farhan.today.data.db.SeedData
 import com.farhan.today.data.db.TodayDatabase
 import com.farhan.today.data.prefs.UserPrefs
@@ -14,6 +15,24 @@ import com.farhan.today.reminder.ReminderScheduler
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Clock
+
+/** Kelompok data yang bisa direset sendiri-sendiri dari Pengaturan. */
+enum class DataFeature(val label: String, val description: String, val tables: List<String>, val reminderSource: ReminderSource?) {
+    WORKOUT(
+        "Latihan", "Rutinitas, jadwal, sesi, dan catatan set. Katalog gerakan bawaan disediakan lagi.",
+        listOf("exercise", "routine", "routine_exercise", "routine_schedule", "workout_session", "set_log"), ReminderSource.WORKOUT,
+    ),
+    CAREER(
+        "Karier", "Lamaran kerja, jadwal interview/coding test, dan riwayat status.",
+        listOf("job_application", "job_event", "application_status_change"), ReminderSource.JOB_EVENT,
+    ),
+    FINANCE(
+        "Keuangan", "Transaksi, anggaran, dompet, tagihan, dan pembayarannya. Kategori bawaan disediakan lagi.",
+        listOf("category", "budget", "wallet", "wallet_allocation", "money_transaction", "bill", "bill_payment"), ReminderSource.BILL,
+    ),
+    TASKS("Tugas", "Semua proyek dan tugas.", listOf("project", "task"), ReminderSource.TASK),
+    CALENDAR("Kalender", "Acara yang kamu buat di Kalender.", listOf("calendar_event"), null),
+}
 
 class BackupException(message: String) : Exception(message)
 
@@ -89,15 +108,44 @@ class DataManager(
         db.withTransaction {
             TABLES.reversed().forEach { sql.execSQL("DELETE FROM `$it`") }
             db.workoutDao().insertCatalogExercises(exerciseCatalog(now))
-            db.financeDao().upsertCategories(
-                SeedData.expenseCategories.mapIndexed { i, (n, icon) ->
-                    CategoryEntity(name = n, kind = MoneyKind.EXPENSE, iconKey = icon, colorKey = "finance", position = i, createdAt = now, updatedAt = now)
-                } + SeedData.incomeCategories.mapIndexed { i, (n, icon) ->
-                    CategoryEntity(name = n, kind = MoneyKind.INCOME, iconKey = icon, colorKey = "income", position = i, createdAt = now, updatedAt = now)
-                }
-            )
+            insertDefaultCategories(now)
         }
         prefs.markSeeded()
+    }
+
+    /** Jumlah baris per fitur (untuk ditampilkan sebelum reset). */
+    suspend fun count(feature: DataFeature): Int = db.withTransaction {
+        feature.tables.sumOf { t -> sql.query("SELECT COUNT(*) FROM `$t`").use { c -> if (c.moveToFirst()) c.getInt(0) else 0 } }
+    }
+
+    /**
+     * Reset satu fitur saja: tabel milik fitur lain tidak disentuh. Pengingat milik fitur ini
+     * dibatalkan dan dihapus; data bawaan (katalog gerakan / kategori) dibuat ulang.
+     */
+    suspend fun reset(feature: DataFeature) {
+        val now = clock.millis()
+        feature.reminderSource?.let { src ->
+            reminders?.let { r -> db.reminderDao().scheduled().filter { it.sourceType == src }.forEach { r.cancel(it.sourceType, it.sourceId) } }
+        }
+        db.withTransaction {
+            feature.tables.reversed().forEach { sql.execSQL("DELETE FROM `$it`") }
+            feature.reminderSource?.let { sql.execSQL("DELETE FROM `reminder` WHERE sourceType = ?", arrayOf(it.name)) }
+            when (feature) {
+                DataFeature.WORKOUT -> db.workoutDao().insertCatalogExercises(exerciseCatalog(now))
+                DataFeature.FINANCE -> insertDefaultCategories(now)
+                else -> Unit
+            }
+        }
+    }
+
+    private suspend fun insertDefaultCategories(now: Long) {
+        db.financeDao().upsertCategories(
+            SeedData.expenseCategories.mapIndexed { i, (n, icon) ->
+                CategoryEntity(name = n, kind = MoneyKind.EXPENSE, iconKey = icon, colorKey = "finance", position = i, createdAt = now, updatedAt = now)
+            } + SeedData.incomeCategories.mapIndexed { i, (n, icon) ->
+                CategoryEntity(name = n, kind = MoneyKind.INCOME, iconKey = icon, colorKey = "income", position = i, createdAt = now, updatedAt = now)
+            }
+        )
     }
 
     private suspend fun cancelAllReminders() {

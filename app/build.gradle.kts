@@ -15,8 +15,8 @@ android {
         applicationId = "com.farhan.today"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "1.0.7"
+        versionCode = 18
+        versionName = "1.0.8"
     }
 
     // Keystore rilis disimpan di luar repo (D:/Android/keystores); path & sandi di keystore.properties (di-ignore git).
